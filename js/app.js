@@ -743,6 +743,11 @@
           const isFirstTry = this.tracker.currentProblemMistakes === 0;
           this.tracker.recordSolve(this.currentProblem, userAnswerDisplay, this.auth.getCurrentUser());
 
+          // ☁️ 未保存スコアが発生したので即座に「今すぐ保存 (N)」へボタンを切り替え！
+          if (this.sync) {
+            this.sync.checkAndNotify();
+          }
+
           // 連続ヒットカウント
           this.comboCount++;
           this.pitchCount++;
@@ -1090,7 +1095,7 @@
       this.btnSync.addEventListener('click', async () => {
         const res = await this.sync.syncNow(true);
         if (res.status === 'success') {
-          alert(`⚾ 先生のスプレッドシートへ ${res.count}球の打撃スコアを送信しました！`);
+          this.setCoachSpeech(`「よし！先生のスプレッドシートへ ${res.count} 球の打撃記録を保存したぞ！！」`);
         }
       });
 
