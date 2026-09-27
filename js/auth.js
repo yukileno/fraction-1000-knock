@@ -21,6 +21,7 @@
 
     // 保存されている名簿辞書 { "5年1組-12": "たろう", ... }
     getRegistry() {
+      if (typeof localStorage === 'undefined') return this._mockRegistry || {};
       try {
         return JSON.parse(localStorage.getItem(STORAGE_KEY_REGISTRY) || '{}');
       } catch (e) {
@@ -29,6 +30,10 @@
     }
 
     saveRegistry(reg) {
+      if (typeof localStorage === 'undefined') {
+        this._mockRegistry = reg;
+        return;
+      }
       try {
         localStorage.setItem(STORAGE_KEY_REGISTRY, JSON.stringify(reg));
       } catch (e) {
@@ -54,6 +59,8 @@
         if (u.className && u.studentNumber && u.nickname) {
           const key = this.makeKey(u.className, u.studentNumber);
           registry[key] = {
+            className: u.className,
+            studentNumber: Number(u.studentNumber),
             nickname: u.nickname,
             totalSolved: Number(u.totalSolved) || 0,
             totalMinutes: Number(u.totalMinutes) || 0,
@@ -106,6 +113,8 @@
       const existing = (typeof registry[key] === 'object' && registry[key] !== null)
         ? registry[key]
         : { totalSolved: 0, totalMinutes: 0, accuracy: null, avgSeconds: null, totalMistakes: 0, lastStudyAt: '' };
+      existing.className = className;
+      existing.studentNumber = Number(number);
       existing.nickname = cleanNick;
       registry[key] = existing;
       this.saveRegistry(registry);
@@ -155,6 +164,46 @@
       });
 
       return names;
+    }
+
+    // 🏆 ランキング用の全児童リストを取得（ローカルキャッシュから即時復元）
+    getAllUsersForRanking() {
+      const reg = this.getRegistry();
+      const list = [];
+      Object.keys(reg).forEach(key => {
+        const val = reg[key];
+        if (!val) return;
+        const nickname = typeof val === 'object' ? val.nickname : val;
+        // キーからクラスと番号をパース (フォールバック用)
+        let className = (typeof val === 'object' && val.className) ? val.className : '';
+        let studentNumber = (typeof val === 'object' && val.studentNumber) ? Number(val.studentNumber) : 0;
+        if (!className || !studentNumber) {
+          const match = key.match(/組(\d+)-番(\d+)/);
+          if (match) {
+            if (!className) className = `5年${match[1]}組`;
+            if (!studentNumber) studentNumber = Number(match[2]);
+          }
+        }
+        const totalSolved = (typeof val === 'object' && val.totalSolved !== undefined) ? Number(val.totalSolved) : 0;
+        const totalMinutes = (typeof val === 'object' && val.totalMinutes !== undefined) ? Number(val.totalMinutes) : 0;
+        const accuracy = (typeof val === 'object' && val.accuracy !== undefined && val.accuracy !== null) ? Number(val.accuracy) : null;
+        const avgSeconds = (typeof val === 'object' && val.avgSeconds !== undefined && val.avgSeconds !== null) ? Number(val.avgSeconds) : null;
+        const totalMistakes = (typeof val === 'object' && val.totalMistakes !== undefined) ? Number(val.totalMistakes) : 0;
+        const lastStudyAt = (typeof val === 'object' && val.lastStudyAt) ? val.lastStudyAt : '';
+
+        list.push({
+          className: className,
+          studentNumber: studentNumber,
+          nickname: nickname || '',
+          totalSolved: totalSolved,
+          totalMinutes: totalMinutes,
+          accuracy: accuracy,
+          avgSeconds: avgSeconds,
+          totalMistakes: totalMistakes,
+          lastStudyAt: lastStudyAt
+        });
+      });
+      return list;
     }
 
     getCurrentUser() {

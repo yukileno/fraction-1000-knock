@@ -1742,4 +1742,371 @@ canvas#scratchCanvas {
   }
 }
 
+/* ==========================================================================
+   🏆 熱血！1000本ノック猛者番付（ランキング）スタイル
+   ========================================================================== */
+.ranking-modal-content {
+  max-width: 820px;
+  width: 95%;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 24px;
+}
+
+.ranking-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 3px solid #1e293b;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+}
+
+.ranking-desc {
+  font-size: 0.85rem;
+  color: #475569;
+  margin-top: 4px;
+}
+
+/* 入部届（トップ画面）内のランキング起動ボタン */
+.auth-ranking-trigger-wrap {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 2px dashed #cbd5e1;
+}
+
+.btn-ranking-trigger {
+  width: 100%;
+  padding: 10px 14px;
+  background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 900;
+  border: 2px solid #0f172a;
+  border-radius: 8px;
+  box-shadow: 0 4px 0 #0f172a;
+  cursor: pointer;
+  transition: all 0.1s;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
+}
+
+.btn-ranking-trigger:hover {
+  background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 5px 0 #0f172a;
+}
+
+.btn-ranking-trigger:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 #0f172a;
+}
+
+/* ログイン中 自分の順位サマリーバナー */
+.my-rank-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border: 3px solid #f59e0b;
+  border-radius: 12px;
+  padding: 10px 16px;
+  margin-bottom: 12px;
+  box-shadow: 3px 3px 0 #b45309;
+  text-align: left;
+}
+
+.my-rank-badge {
+  background: linear-gradient(180deg, #dc2626 0%, #991b1b 100%);
+  color: #ffffff;
+  font-size: 1.15rem;
+  font-weight: 900;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  border: 2px solid #0f172a;
+  box-shadow: 2px 2px 0 #0f172a;
+  white-space: nowrap;
+}
+
+.my-rank-info {
+  flex: 1;
+}
+
+.my-rank-name {
+  font-size: 0.95rem;
+  font-weight: 900;
+  color: #1e293b;
+}
+
+.my-rank-stat {
+  font-size: 0.88rem;
+  font-weight: bold;
+  color: #c2410c;
+  margin-top: 2px;
+}
+
+/* コントロールバー（クラス絞り込み・更新） */
+.ranking-control-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.ranking-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-label {
+  font-size: 0.88rem;
+  font-weight: 900;
+  color: #1e293b;
+}
+
+.filter-select {
+  padding: 6px 12px;
+  font-size: 0.88rem;
+  font-weight: bold;
+  border: 2px solid #1e293b;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.btn-ranking-refresh {
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  font-weight: 900;
+  background: #3b82f6;
+  color: #ffffff;
+  border: 2px solid #0f172a;
+  border-radius: 6px;
+  box-shadow: 2px 2px 0 #0f172a;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+
+.btn-ranking-refresh:hover {
+  background: #2563eb;
+}
+
+.btn-ranking-refresh:active {
+  transform: translateY(1px);
+  box-shadow: 1px 1px 0 #0f172a;
+}
+
+/* ランキングテーブル */
+.ranking-table-wrap {
+  flex: 1;
+  max-height: 48vh;
+  overflow-y: auto;
+  border: 2px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.ranking-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.ranking-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #0f172a;
+  color: #ffffff;
+  padding: 10px 8px;
+  border: 1px solid #334155;
+  font-size: 0.85rem;
+}
+
+.ranking-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #e2e8f0;
+  vertical-align: middle;
+}
+
+.ranking-table tbody tr:nth-child(even) {
+  background: #f8fafc;
+}
+
+.ranking-table tbody tr:hover {
+  background: #f1f5f9;
+}
+
+/* 自分の行ハイライト */
+.ranking-table tbody tr.my-rank-row {
+  background: #fef3c7 !important;
+  font-weight: bold;
+  border-left: 4px solid #ea580c;
+}
+
+/* 順位バッジ */
+.rank-badge {
+  display: inline-block;
+  min-width: 32px;
+  padding: 3px 8px;
+  font-size: 0.85rem;
+  font-weight: 900;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.rank-badge.rank-1 {
+  background: linear-gradient(180deg, #fbbf24 0%, #d97706 100%);
+  color: #78350f;
+  border: 2px solid #b45309;
+  box-shadow: 1px 1px 3px rgba(0,0,0,0.25);
+  font-size: 0.92rem;
+}
+
+.rank-badge.rank-2 {
+  background: linear-gradient(180deg, #e2e8f0 0%, #94a3b8 100%);
+  color: #1e293b;
+  border: 2px solid #64748b;
+  box-shadow: 1px 1px 3px rgba(0,0,0,0.2);
+}
+
+.rank-badge.rank-3 {
+  background: linear-gradient(180deg, #fed7aa 0%, #ea580c 100%);
+  color: #7c2d12;
+  border: 2px solid #c2410c;
+  box-shadow: 1px 1px 3px rgba(0,0,0,0.2);
+}
+
+.rank-badge.rank-normal {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+/* 選手名カラム */
+.player-col-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+}
+
+.player-main-name {
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.player-class-num {
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.my-player-tag {
+  background: #dc2626;
+  color: #ffffff;
+  font-size: 0.7rem;
+  font-weight: 900;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* 状況 / 達成度バッジ */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 0.82rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+/* 1000問以上：完走＆追加練習（猛者モード） */
+.status-over-1000 {
+  background: linear-gradient(135deg, #ef4444 0%, #b91c1c 50%, #7f1d1d 100%);
+  color: #ffffff;
+  border: 2px solid #fbbf24;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.6);
+  animation: flamePulse 1.8s infinite alternate;
+}
+
+@keyframes flamePulse {
+  0% { box-shadow: 0 0 4px rgba(239, 68, 68, 0.4); transform: scale(1); }
+  100% { box-shadow: 0 0 12px rgba(245, 158, 11, 0.9); transform: scale(1.03); }
+}
+
+/* 1000問未満：あと何問 */
+.status-under-1000 {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #93c5fd;
+}
+
+.status-under-1000 strong {
+  color: #b91c1c;
+}
+
+/* 特打本数カラム ＆ ミニプログレスバー */
+.rank-solved-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.rank-solved-num-row {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.rank-solved-num {
+  font-size: 1.05rem;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.rank-solved-unit {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.rank-mini-bar-bg {
+  width: 100%;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.rank-mini-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.bar-fill-normal {
+  background: linear-gradient(90deg, #3b82f6 0%, #ef4444 100%);
+}
+
+.bar-fill-gold {
+  background: linear-gradient(90deg, #f59e0b 0%, #ef4444 100%);
+  box-shadow: 0 0 6px #f59e0b;
+}
+
+.ranking-empty-msg {
+  padding: 30px;
+  text-align: center;
+  color: #64748b;
+  font-weight: bold;
+}
+
+.ranking-footer-note {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
 

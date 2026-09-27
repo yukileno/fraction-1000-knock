@@ -461,6 +461,25 @@
       this.btnCloseLogs = document.getElementById('btnCloseLogs');
       this.btnCloseLogsBottom = document.getElementById('btnCloseLogsBottom');
       this.logTableBody = document.getElementById('logTableBody');
+
+      // 🏆 ランキングモーダル要素
+      this.rankingModal = document.getElementById('rankingModal');
+      this.btnShowRanking = document.getElementById('btnShowRanking');
+      this.btnOpenRankingFromAuth = document.getElementById('btnOpenRankingFromAuth');
+      this.btnOpenRankingFromAuth2 = document.getElementById('btnOpenRankingFromAuth2');
+      this.btnOpenRankingFromGoal = document.getElementById('btnOpenRankingFromGoal');
+      this.btnCloseRanking = document.getElementById('btnCloseRanking');
+      this.btnCloseRankingBottom = document.getElementById('btnCloseRankingBottom');
+      this.rankingClassFilter = document.getElementById('rankingClassFilter');
+      this.btnRefreshRanking = document.getElementById('btnRefreshRanking');
+      this.btnRefreshRankingText = document.getElementById('btnRefreshRankingText');
+      this.rankingTableBody = document.getElementById('rankingTableBody');
+      this.rankingEmptyMsg = document.getElementById('rankingEmptyMsg');
+      this.myRankBanner = document.getElementById('myRankBanner');
+      this.myRankBadge = document.getElementById('myRankBadge');
+      this.myRankName = document.getElementById('myRankName');
+      this.myRankStat = document.getElementById('myRankStat');
+      this.rankingFromAuth = false;
     }
 
     initCoachImage() {
@@ -1075,6 +1094,7 @@
         if (this.logModal && this.logModal.classList.contains('active')) return;
         if (this.idleModal && this.idleModal.classList.contains('active')) return;
         if (this.goalModal && this.goalModal.classList.contains('active')) return;
+        if (this.rankingModal && this.rankingModal.classList.contains('active')) return;
 
         if (/^[0-9]$/.test(e.key)) {
           this.inputNumpadDigit(e.key);
@@ -1121,6 +1141,32 @@
       this.btnCloseLogsBottom.addEventListener('click', () => {
         this.logModal.classList.remove('active');
       });
+
+      // 🏆 ランキングモーダル表示・非表示
+      if (this.btnShowRanking) {
+        this.btnShowRanking.addEventListener('click', () => this.openRankingModal(false));
+      }
+      if (this.btnOpenRankingFromAuth) {
+        this.btnOpenRankingFromAuth.addEventListener('click', () => this.openRankingModal(true));
+      }
+      if (this.btnOpenRankingFromAuth2) {
+        this.btnOpenRankingFromAuth2.addEventListener('click', () => this.openRankingModal(true));
+      }
+      if (this.btnOpenRankingFromGoal) {
+        this.btnOpenRankingFromGoal.addEventListener('click', () => this.openRankingModal(false));
+      }
+      if (this.btnCloseRanking) {
+        this.btnCloseRanking.addEventListener('click', () => this.closeRankingModal());
+      }
+      if (this.btnCloseRankingBottom) {
+        this.btnCloseRankingBottom.addEventListener('click', () => this.closeRankingModal());
+      }
+      if (this.rankingClassFilter) {
+        this.rankingClassFilter.addEventListener('change', () => this.renderRankingTable());
+      }
+      if (this.btnRefreshRanking) {
+        this.btnRefreshRanking.addEventListener('click', () => this.refreshRankingData());
+      }
     }
 
     initScratchCanvas() {
@@ -1245,6 +1291,268 @@
             <td>${log.timeSpentSeconds || 0}秒</td>
             <td>${mistakeBadge}</td>
             <td style="font-size: 0.8rem; color: #64748b;">${categoryStr}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // =========================================================================
+    // 🏆 熱血！1000本ノック猛者番付（ランキング）処理
+    // =========================================================================
+    async openRankingModal(fromAuth = false) {
+      this.rankingFromAuth = fromAuth;
+      if (fromAuth && this.authModal) {
+        this.authModal.classList.remove('active');
+      }
+      if (this.rankingModal) {
+        this.rankingModal.classList.add('active');
+      }
+
+      // まずローカル保存済みの名簿から即時描画
+      this.renderRankingTable();
+
+      // バックグラウンドで最新データをスプレッドシートから取得して再描画
+      try {
+        const users = await this.sync.fetchUsersFromSheet(8000);
+        if (users && users.length > 0) {
+          this.auth.syncWithRemoteUsers(users);
+          this.renderRankingTable();
+        }
+      } catch (e) {
+        console.warn('Ranking background fetch warning:', e);
+      }
+    }
+
+    closeRankingModal() {
+      if (this.rankingModal) {
+        this.rankingModal.classList.remove('active');
+      }
+      // 入部届（トップ画面）から開いており、まだログイン前なら入部届を再表示
+      if (this.rankingFromAuth && (!this.auth || !this.auth.isLoggedIn())) {
+        if (this.authModal) {
+          this.authModal.classList.add('active');
+        }
+      }
+      this.rankingFromAuth = false;
+    }
+
+    async refreshRankingData() {
+      if (!this.btnRefreshRanking) return;
+      this.btnRefreshRanking.disabled = true;
+      if (this.btnRefreshRankingText) {
+        this.btnRefreshRankingText.textContent = '⏳ 更新中...';
+      }
+
+      try {
+        const users = await this.sync.fetchUsersFromSheet(12000);
+        if (users && users.length > 0) {
+          this.auth.syncWithRemoteUsers(users);
+        }
+        this.renderRankingTable();
+        if (this.btnRefreshRankingText) {
+          this.btnRefreshRankingText.textContent = '✅ 更新完了！';
+        }
+      } catch (e) {
+        console.warn('Failed to refresh ranking manually:', e);
+        if (this.btnRefreshRankingText) {
+          this.btnRefreshRankingText.textContent = '⚠️ 更新失敗';
+        }
+      } finally {
+        setTimeout(() => {
+          if (this.btnRefreshRanking) {
+            this.btnRefreshRanking.disabled = false;
+          }
+          if (this.btnRefreshRankingText) {
+            this.btnRefreshRankingText.textContent = '🔄 最新データ更新';
+          }
+        }, 1500);
+      }
+    }
+
+    renderRankingTable() {
+      if (!this.rankingTableBody) return;
+
+      const TARGET = 1000;
+      const currentUser = this.auth ? this.auth.getCurrentUser() : null;
+      let allUsers = (this.auth && typeof this.auth.getAllUsersForRanking === 'function')
+        ? this.auth.getAllUsersForRanking()
+        : [];
+
+      // 現在ログイン中の児童の最新データをマージ（未同期の本日のローカルログも加味）
+      if (currentUser) {
+        const stats = this.tracker.getStatsComparison(currentUser);
+        const myTotal = stats.knocks.done;
+        const myKey = this.auth.makeKey(currentUser.className, currentUser.studentNumber);
+
+        let found = false;
+        allUsers.forEach(u => {
+          if (this.auth.makeKey(u.className, u.studentNumber) === myKey) {
+            u.totalSolved = Math.max(Number(u.totalSolved) || 0, myTotal);
+            if (stats.today.accuracy !== null && stats.today.accuracy !== undefined) {
+              u.accuracy = stats.today.accuracy;
+            }
+            if (!u.nickname && currentUser.nickname) {
+              u.nickname = currentUser.nickname;
+            }
+            found = true;
+          }
+        });
+
+        if (!found) {
+          allUsers.push({
+            className: currentUser.className,
+            studentNumber: Number(currentUser.studentNumber),
+            nickname: currentUser.nickname,
+            totalSolved: myTotal,
+            accuracy: stats.today.accuracy,
+            avgSeconds: stats.today.avgSec,
+            lastStudyAt: ''
+          });
+        }
+      }
+
+      // 絞り込みフィルター（クラス）
+      const filterVal = this.rankingClassFilter ? this.rankingClassFilter.value : 'ALL';
+      let filtered = allUsers.filter(u => {
+        // ニックネームがある、または 1問以上解いている児童のみ表示
+        const hasNick = Boolean((u.nickname || '').trim());
+        const hasSolved = (Number(u.totalSolved) || 0) > 0;
+        if (!hasNick && !hasSolved) return false;
+
+        if (filterVal === 'ALL') return true;
+        // クラス名の正規化比較（「組」の直前の数字を比較）
+        const filterMatch = filterVal.match(/([1-6])\s*組/);
+        const userMatch = String(u.className || '').match(/([1-6])\s*組/);
+        if (filterMatch && userMatch) {
+          return filterMatch[1] === userMatch[1];
+        }
+        return u.className === filterVal;
+      });
+
+      // ソート：
+      // 1. 解いた総問題数（降順）
+      // 2. 1発正解率（降順）
+      // 3. 出席番号（昇順）
+      filtered.sort((a, b) => {
+        const diffSolved = (Number(b.totalSolved) || 0) - (Number(a.totalSolved) || 0);
+        if (diffSolved !== 0) return diffSolved;
+        const diffAcc = (Number(b.accuracy) || 0) - (Number(a.accuracy) || 0);
+        if (diffAcc !== 0) return diffAcc;
+        return (Number(a.studentNumber) || 0) - (Number(b.studentNumber) || 0);
+      });
+
+      // 自分の順位を見つける
+      let myRank = null;
+      let myData = null;
+      if (currentUser) {
+        const myKey = this.auth.makeKey(currentUser.className, currentUser.studentNumber);
+        const idx = filtered.findIndex(u => this.auth.makeKey(u.className, u.studentNumber) === myKey);
+        if (idx >= 0) {
+          myRank = idx + 1;
+          myData = filtered[idx];
+        }
+      }
+
+      // 自分の順位バナーの更新
+      if (this.myRankBanner) {
+        if (currentUser && myData) {
+          this.myRankBanner.style.display = 'flex';
+          this.myRankBadge.textContent = `第 ${myRank} 位 / ${filtered.length}人中`;
+          const mySolved = Number(myData.totalSolved) || 0;
+          this.myRankName.textContent = `⚾ ${currentUser.className} ${currentUser.studentNumber}番 ${currentUser.nickname} 選手`;
+          if (mySolved >= TARGET) {
+            const extra = mySolved - TARGET;
+            this.myRankStat.innerHTML = `🏆 <strong>祝・1000本完走！</strong> 猛者追加特打: <strong>+${extra}問</strong>（通算 ${mySolved}本）`;
+          } else {
+            const rem = TARGET - mySolved;
+            const pct = Math.min(100, Math.round((mySolved / TARGET) * 100));
+            this.myRankStat.innerHTML = `通算 <strong>${mySolved}本</strong> (1000本まで <strong>あと ${rem}問！</strong> 進捗 ${pct}%)`;
+          }
+        } else {
+          this.myRankBanner.style.display = 'none';
+        }
+      }
+
+      // テーブルが空の場合
+      if (filtered.length === 0) {
+        this.rankingTableBody.innerHTML = '';
+        if (this.rankingEmptyMsg) this.rankingEmptyMsg.style.display = 'block';
+        return;
+      }
+      if (this.rankingEmptyMsg) this.rankingEmptyMsg.style.display = 'none';
+
+      // テーブル行生成
+      this.rankingTableBody.innerHTML = filtered.map((u, i) => {
+        const rank = i + 1;
+        const totalSolved = Number(u.totalSolved) || 0;
+        const isCompleted = totalSolved >= TARGET;
+        const isMe = currentUser && (this.auth.makeKey(u.className, u.studentNumber) === this.auth.makeKey(currentUser.className, currentUser.studentNumber));
+
+        // 順位バッジ
+        let rankBadgeHtml = '';
+        if (rank === 1) {
+          rankBadgeHtml = '<span class="rank-badge rank-1">🥇 1位</span>';
+        } else if (rank === 2) {
+          rankBadgeHtml = '<span class="rank-badge rank-2">🥈 2位</span>';
+        } else if (rank === 3) {
+          rankBadgeHtml = '<span class="rank-badge rank-3">🥉 3位</span>';
+        } else {
+          rankBadgeHtml = `<span class="rank-badge rank-normal">${rank}位</span>`;
+        }
+
+        // 選手名
+        const nickDisplay = (u.nickname || '選手').trim();
+        const classNumDisplay = `${u.className || ''} ${u.studentNumber ? u.studentNumber + '番' : ''}`;
+        const meTag = isMe ? '<span class="my-player-tag">あなた</span>' : '';
+
+        // 目標達成状況（要求の中核：あと何問か、1000問完走なら追加練習で何問か）
+        let statusBadgeHtml = '';
+        let barClass = 'bar-fill-normal';
+        let barWidth = 0;
+
+        if (isCompleted) {
+          const extra = totalSolved - TARGET;
+          statusBadgeHtml = `<span class="status-badge status-over-1000">🔥 完走！追加 +${extra}問</span>`;
+          barClass = 'bar-fill-gold';
+          barWidth = 100;
+        } else {
+          const remaining = TARGET - totalSolved;
+          const pct = Math.min(100, Math.round((totalSolved / TARGET) * 100));
+          statusBadgeHtml = `<span class="status-badge status-under-1000">あと <strong>${remaining}</strong>問 (${pct}%)</span>`;
+          barWidth = pct;
+        }
+
+        // 打率
+        let accStr = '-';
+        if (u.accuracy !== null && u.accuracy !== undefined && !isNaN(u.accuracy)) {
+          accStr = `${Math.round(u.accuracy)}%`;
+        }
+
+        const rowClass = isMe ? 'class="my-rank-row"' : '';
+
+        return `
+          <tr ${rowClass}>
+            <td>${rankBadgeHtml}</td>
+            <td>
+              <div class="player-col-wrap">
+                <span class="player-main-name">${nickDisplay}</span>
+                <span class="player-class-num">${classNumDisplay}</span>
+                ${meTag}
+              </div>
+            </td>
+            <td>${statusBadgeHtml}</td>
+            <td>
+              <div class="rank-solved-wrap">
+                <div class="rank-solved-num-row">
+                  <span class="rank-solved-num">${totalSolved}</span>
+                  <span class="rank-solved-unit">本</span>
+                </div>
+                <div class="rank-mini-bar-bg">
+                  <div class="rank-mini-bar-fill ${barClass}" style="width: ${barWidth}%;"></div>
+                </div>
+              </div>
+            </td>
+            <td style="font-weight: bold; color: #1e293b;">${accStr}</td>
           </tr>
         `;
       }).join('');

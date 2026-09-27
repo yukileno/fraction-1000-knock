@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>熱血！分数1000本ノック 〜猛特訓編〜</title>
-  <link rel="stylesheet" href="css/style.css?v=20260926_4">
+  <link rel="stylesheet" href="css/style.css?v=20260928_1">
 </head>
 <body class="theme-nekketsu">
 
@@ -50,6 +50,7 @@
           </button>
         </div>
 
+        <button class="btn-header btn-comic" id="btnShowRanking">🏆 猛者番付</button>
         <button class="btn-header btn-comic" id="btnShowLogs">📜 猛特訓記録</button>
       </div>
     </header>
@@ -263,6 +264,12 @@
         </div>
 
         <button type="button" class="auth-submit-btn btn-comic" id="btnStepNext">次へ進む！ 👉</button>
+
+        <div class="auth-ranking-trigger-wrap">
+          <button type="button" class="btn-ranking-trigger btn-comic" id="btnOpenRankingFromAuth">
+            🏆 1000本ノック猛者番付（ランキング）を見る
+          </button>
+        </div>
       </div>
 
       <!-- ステップ2-A: 登録済み選手の確認画面 -->
@@ -284,6 +291,12 @@
         <div>
           <button type="button" class="btn-link-sub" id="btnEditNickname">
             名前を修正する / 別の選手
+          </button>
+        </div>
+
+        <div class="auth-ranking-trigger-wrap" style="margin-top: 10px;">
+          <button type="button" class="btn-ranking-trigger btn-comic" id="btnOpenRankingFromAuth2">
+            🏆 1000本ノック猛者番付（ランキング）を見る
           </button>
         </div>
       </div>
@@ -332,6 +345,11 @@
       <button class="auth-submit-btn btn-comic" id="btnContinueExtra">
         限界突破！追加特打へ挑む！！ 🔥
       </button>
+      <div style="margin-top: 10px;">
+        <button type="button" class="btn-link-sub" id="btnOpenRankingFromGoal" style="font-weight: bold; color: #b45309;">
+          🏆 猛者番付（ランキング）を確認する
+        </button>
+      </div>
     </div>
   </div>
 
@@ -383,16 +401,85 @@
     </div>
   </div>
 
+  <!-- 🏆 熱血！1000本ノック猛者番付（ランキング）モーダル -->
+  <div class="modal-overlay" id="rankingModal">
+    <div class="modal-content ranking-modal-content comic-modal">
+      <div class="ranking-modal-header">
+        <div style="text-align: left;">
+          <h2 style="font-size: 1.4rem;" class="comic-sub-title">🏆 熱血！1000本ノック猛者番付</h2>
+          <p class="ranking-desc">
+            打倒・分数の壁！1000問完走後は<strong>「追加特打」</strong>の球数で限界突破ランキング！
+          </p>
+        </div>
+        <button class="btn-header btn-comic" id="btnCloseRanking">✕ 閉じる</button>
+      </div>
+
+      <!-- ログイン中の自分の順位サマリーバナー -->
+      <div class="my-rank-banner" id="myRankBanner" style="display: none;">
+        <div class="my-rank-badge" id="myRankBadge">第 - 位</div>
+        <div class="my-rank-info">
+          <div class="my-rank-name" id="myRankName">あなた</div>
+          <div class="my-rank-stat" id="myRankStat">通算 0本 (1000本まで あと 1000本！)</div>
+        </div>
+      </div>
+
+      <!-- 絞り込み ＆ 更新バー -->
+      <div class="ranking-control-bar">
+        <div class="ranking-filter-group">
+          <label for="rankingClassFilter" class="filter-label">表示:</label>
+          <select class="auth-select filter-select" id="rankingClassFilter">
+            <option value="ALL">🌟 全クラス合同番付</option>
+            <option value="5年1組">5年1組</option>
+            <option value="5年2組">5年2組</option>
+            <option value="5年3組">5年3組</option>
+            <option value="5年4組">5年4組</option>
+            <option value="5年5組">5年5組</option>
+            <option value="5年6組">5年6組</option>
+          </select>
+        </div>
+        <button type="button" class="btn-ranking-refresh btn-comic" id="btnRefreshRanking">
+          <span id="btnRefreshRankingText">🔄 最新データ更新</span>
+        </button>
+      </div>
+
+      <!-- ランキングテーブル -->
+      <div class="ranking-table-wrap">
+        <table class="ranking-table comic-table">
+          <thead>
+            <tr>
+              <th style="width: 55px;">順位</th>
+              <th>選手名</th>
+              <th>目標達成状況</th>
+              <th style="width: 140px;">特打本数</th>
+              <th style="width: 75px;">1発打率</th>
+            </tr>
+          </thead>
+          <tbody id="rankingTableBody">
+            <!-- JSで動的生成 -->
+          </tbody>
+        </table>
+        <div class="ranking-empty-msg" id="rankingEmptyMsg" style="display: none;">
+          まだ記録された選手がいません。最初の挑戦者になれ！！
+        </div>
+      </div>
+
+      <div class="log-modal-actions" style="justify-content: space-between; align-items: center; margin-top: 12px;">
+        <span class="ranking-footer-note">※1000問完走者は「追加特打（+〇問）」の猛者ゾーンに突入します！</span>
+        <button class="btn-header btn-comic" id="btnCloseRankingBottom">閉じる</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 効果音（直接ファイル参照プリロード） -->
   <audio id="audioHit" src="sound/hit.mp3" preload="auto"></audio>
   <audio id="audioHomerun" src="sound/homerun.mp3" preload="auto"></audio>
 
   <!-- スクリプト読み込み（assets.jsを先頭に配置） -->
-  <script src="js/assets.js?v=20260926_7"></script>
-  <script src="js/fraction.js?v=20260926_7"></script>
-  <script src="js/tracker.js?v=20260926_7"></script>
-  <script src="js/auth.js?v=20260926_7"></script>
-  <script src="js/sync.js?v=20260926_7"></script>
-  <script src="js/app.js?v=20260926_7"></script>
+  <script src="js/assets.js?v=20260928_1"></script>
+  <script src="js/fraction.js?v=20260928_1"></script>
+  <script src="js/tracker.js?v=20260928_1"></script>
+  <script src="js/auth.js?v=20260928_1"></script>
+  <script src="js/sync.js?v=20260928_1"></script>
+  <script src="js/app.js?v=20260928_1"></script>
 </body>
 </html>
