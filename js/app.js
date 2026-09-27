@@ -480,6 +480,13 @@
       this.myRankName = document.getElementById('myRankName');
       this.myRankStat = document.getElementById('myRankStat');
       this.rankingFromAuth = false;
+
+      // ⚠️ ランキング5分制限・鬼監督の喝モーダル要素
+      this.rankingCooldownModal = document.getElementById('rankingCooldownModal');
+      this.rankingCooldownTimerText = document.getElementById('rankingCooldownTimerText');
+      this.btnCloseRankingCooldown = document.getElementById('btnCloseRankingCooldown');
+      this.rankingCooldownTimerId = null;
+      this.rankingCooldownFromAuth = false;
     }
 
     initCoachImage() {
@@ -488,7 +495,7 @@
         : 'url("kyojin.jpg")';
       document.body.style.backgroundImage = bgUrl;
       if (this.appViewport) {
-        this.appViewport.style.backgroundImage = bgUrl;
+        this.appViewport.style.backgroundImage = 'none';
       }
     }
 
@@ -884,30 +891,30 @@
       if (k.isCompleted) {
         this.knockStatusLabel.textContent = '🔥 魂の追加特打！';
         this.knockRemainingDisplay.textContent = `${k.done}`;
-        this.knockUnit.textContent = '本目！！';
+        this.knockUnit.textContent = '問目！！';
         this.knockProgress.style.width = '100%';
-        this.knockSubText.textContent = `猛者認定済！ 限界突破中 (+${k.extra}本)`;
+        this.knockSubText.textContent = `猛者認定済！ 限界突破・追加練習 (+${k.extra}問)`;
       } else {
         this.knockStatusLabel.textContent = '🔥 魂の1000本ノック 残り';
         this.knockRemainingDisplay.textContent = `${k.remaining}`;
-        this.knockUnit.textContent = '本！！';
+        this.knockUnit.textContent = '問！！';
         this.knockProgress.style.width = `${k.percent}%`;
-        this.knockSubText.textContent = `打倒・分数の壁！ ${k.done} / ${k.target} 本 (${k.percent}%)`;
+        this.knockSubText.textContent = `打倒・分数の壁！ ${k.done} / ${k.target} 問正解 (${k.percent}%)`;
       }
 
-      // 1. 本日特打
-      this.statTodaySolved.textContent = `${stats.today.count}本`;
+      // 1. 本日正解数
+      this.statTodaySolved.textContent = `${stats.today.count}問`;
       this.statTodayTime.textContent = `特打時間: ${stats.today.todayMinutes}分`;
 
-      // 2. 1発打率
+      // 2. 1発正解率
       const rate = (stats.today.accuracy / 100).toFixed(3).replace(/^0/, '');
       this.statTodayAcc.textContent = stats.today.count > 0 ? `.${rate.replace('.', '')}` : '1.000';
       if (stats.past.count > 0) {
         const pastRate = (stats.past.accuracy / 100).toFixed(3).replace(/^0/, '');
-        this.statPastAcc.textContent = `通算打率: .${pastRate.replace('.', '')}`;
+        this.statPastAcc.textContent = `通算: .${pastRate.replace('.', '')}`;
         if (stats.accDiff !== null && stats.accDiff > 0) {
           this.statAccBadge.className = 'growth-badge up';
-          this.statAccBadge.textContent = `📈 打率UP!`;
+          this.statAccBadge.textContent = `📈 精度UP!`;
         }
       } else {
         this.statPastAcc.textContent = `通算: -`;
@@ -927,8 +934,8 @@
         }
       }
 
-      // 4. 通算特打本数 ＆ 連続ヒット
-      this.statAllSolved.textContent = `${stats.all.count}本`;
+      // 4. 通算累計正解数 ＆ 連続ヒット
+      this.statAllSolved.textContent = `${stats.all.count}問`;
       this.statAllTime.textContent = `総特打: ${stats.all.totalMinutes}分`;
       this.statComboBadge.textContent = `連続 ${this.comboCount} 球ヒット！`;
     }
@@ -1095,6 +1102,7 @@
         if (this.idleModal && this.idleModal.classList.contains('active')) return;
         if (this.goalModal && this.goalModal.classList.contains('active')) return;
         if (this.rankingModal && this.rankingModal.classList.contains('active')) return;
+        if (this.rankingCooldownModal && this.rankingCooldownModal.classList.contains('active')) return;
 
         if (/^[0-9]$/.test(e.key)) {
           this.inputNumpadDigit(e.key);
@@ -1166,6 +1174,9 @@
       }
       if (this.btnRefreshRanking) {
         this.btnRefreshRanking.addEventListener('click', () => this.refreshRankingData());
+      }
+      if (this.btnCloseRankingCooldown) {
+        this.btnCloseRankingCooldown.addEventListener('click', () => this.hideRankingCooldownModal());
       }
     }
 
@@ -1297,9 +1308,92 @@
     }
 
     // =========================================================================
-    // 🏆 熱血！1000本ノック猛者番付（ランキング）処理
+    // 🏆 熱血！1000本ノック猛者番付（ランキング）処理（5分クールダウン制限・リロード防止）
     // =========================================================================
+    getRankingCooldownRemainingSeconds() {
+      try {
+        const lastTime = Number(localStorage.getItem('keisan_last_ranking_view_time_v1')) || 0;
+        if (!lastTime) return 0;
+        const elapsed = Date.now() - lastTime;
+        const cooldownMs = 5 * 60 * 1000; // 5分間
+        if (elapsed < cooldownMs) {
+          return Math.ceil((cooldownMs - elapsed) / 1000);
+        }
+        return 0;
+      } catch (e) {
+        return 0;
+      }
+    }
+
+    showRankingCooldownModal(remainingSec, fromAuth = false) {
+      this.rankingCooldownFromAuth = fromAuth;
+      if (fromAuth && this.authModal) {
+        this.authModal.classList.remove('active');
+      }
+
+      if (this.rankingCooldownTimerId) {
+        clearInterval(this.rankingCooldownTimerId);
+        this.rankingCooldownTimerId = null;
+      }
+
+      const updateTimerText = () => {
+        const sec = this.getRankingCooldownRemainingSeconds();
+        if (sec <= 0) {
+          if (this.rankingCooldownTimerText) {
+            this.rankingCooldownTimerText.textContent = '解禁されました！バッターボックスへ！';
+          }
+          if (this.rankingCooldownTimerId) {
+            clearInterval(this.rankingCooldownTimerId);
+            this.rankingCooldownTimerId = null;
+          }
+          return;
+        }
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        const sStr = s < 10 ? `0${s}` : `${s}`;
+        if (this.rankingCooldownTimerText) {
+          this.rankingCooldownTimerText.textContent = `あと ${m}分 ${sStr}秒`;
+        }
+      };
+
+      updateTimerText();
+      this.rankingCooldownTimerId = setInterval(updateTimerText, 1000);
+
+      if (this.rankingCooldownModal) {
+        this.rankingCooldownModal.classList.add('active');
+      }
+    }
+
+    hideRankingCooldownModal() {
+      if (this.rankingCooldownTimerId) {
+        clearInterval(this.rankingCooldownTimerId);
+        this.rankingCooldownTimerId = null;
+      }
+      if (this.rankingCooldownModal) {
+        this.rankingCooldownModal.classList.remove('active');
+      }
+      // もし入部届（トップ画面）から開いており、まだログイン前なら入部届を再表示
+      if (this.rankingCooldownFromAuth && (!this.auth || !this.auth.isLoggedIn())) {
+        if (this.authModal) {
+          this.authModal.classList.add('active');
+        }
+      }
+      this.rankingCooldownFromAuth = false;
+    }
+
     async openRankingModal(fromAuth = false) {
+      // ⚠️ 5分クールダウンチェック（リロードしてもlocalStorageの絶対時刻で判定するため回避不可）
+      const remainingSec = this.getRankingCooldownRemainingSeconds();
+      if (remainingSec > 0) {
+        this.showRankingCooldownModal(remainingSec, fromAuth);
+        return;
+      }
+
+      // 閲覧時刻をlocalStorageに記録（リロード対策）
+      try {
+        localStorage.setItem('keisan_last_ranking_view_time_v1', Date.now().toString());
+      } catch (e) {}
+
       this.rankingFromAuth = fromAuth;
       if (fromAuth && this.authModal) {
         this.authModal.classList.remove('active');
@@ -1429,15 +1523,11 @@
         return u.className === filterVal;
       });
 
-      // ソート：
-      // 1. 解いた総問題数（降順）
-      // 2. 1発正解率（降順）
-      // 3. 出席番号（昇順）
+      // ソート：正解した総問題数（降順）➡ 出席番号（昇順）
+      // ※一発正解ではなく、粘り強く解いて正解した「こなした数」を何より評価！
       filtered.sort((a, b) => {
         const diffSolved = (Number(b.totalSolved) || 0) - (Number(a.totalSolved) || 0);
         if (diffSolved !== 0) return diffSolved;
-        const diffAcc = (Number(b.accuracy) || 0) - (Number(a.accuracy) || 0);
-        if (diffAcc !== 0) return diffAcc;
         return (Number(a.studentNumber) || 0) - (Number(b.studentNumber) || 0);
       });
 
@@ -1462,11 +1552,11 @@
           this.myRankName.textContent = `⚾ ${currentUser.className} ${currentUser.studentNumber}番 ${currentUser.nickname} 選手`;
           if (mySolved >= TARGET) {
             const extra = mySolved - TARGET;
-            this.myRankStat.innerHTML = `🏆 <strong>祝・1000本完走！</strong> 猛者追加特打: <strong>+${extra}問</strong>（通算 ${mySolved}本）`;
+            this.myRankStat.innerHTML = `🏆 <strong>祝・1000問完走！</strong> 追加練習: <strong>+${extra}問</strong>（累計正解数 ${mySolved}問）`;
           } else {
             const rem = TARGET - mySolved;
             const pct = Math.min(100, Math.round((mySolved / TARGET) * 100));
-            this.myRankStat.innerHTML = `通算 <strong>${mySolved}本</strong> (1000本まで <strong>あと ${rem}問！</strong> 進捗 ${pct}%)`;
+            this.myRankStat.innerHTML = `累計正解数 <strong>${mySolved}問</strong> (1000問まで <strong>あと ${rem}問！</strong> 進捗 ${pct}%)`;
           }
         } else {
           this.myRankBanner.style.display = 'none';
@@ -1481,7 +1571,7 @@
       }
       if (this.rankingEmptyMsg) this.rankingEmptyMsg.style.display = 'none';
 
-      // テーブル行生成
+      // テーブル行生成（1発打率を廃止し、正解した問題数で評価）
       this.rankingTableBody.innerHTML = filtered.map((u, i) => {
         const rank = i + 1;
         const totalSolved = Number(u.totalSolved) || 0;
@@ -1505,14 +1595,14 @@
         const classNumDisplay = `${u.className || ''} ${u.studentNumber ? u.studentNumber + '番' : ''}`;
         const meTag = isMe ? '<span class="my-player-tag">あなた</span>' : '';
 
-        // 目標達成状況（要求の中核：あと何問か、1000問完走なら追加練習で何問か）
+        // 目標達成状況（あと何問か、1000問完走なら追加練習で何問か）
         let statusBadgeHtml = '';
         let barClass = 'bar-fill-normal';
         let barWidth = 0;
 
         if (isCompleted) {
           const extra = totalSolved - TARGET;
-          statusBadgeHtml = `<span class="status-badge status-over-1000">🔥 完走！追加 +${extra}問</span>`;
+          statusBadgeHtml = `<span class="status-badge status-over-1000">🔥 完走！追加練習 +${extra}問</span>`;
           barClass = 'bar-fill-gold';
           barWidth = 100;
         } else {
@@ -1520,12 +1610,6 @@
           const pct = Math.min(100, Math.round((totalSolved / TARGET) * 100));
           statusBadgeHtml = `<span class="status-badge status-under-1000">あと <strong>${remaining}</strong>問 (${pct}%)</span>`;
           barWidth = pct;
-        }
-
-        // 打率
-        let accStr = '-';
-        if (u.accuracy !== null && u.accuracy !== undefined && !isNaN(u.accuracy)) {
-          accStr = `${Math.round(u.accuracy)}%`;
         }
 
         const rowClass = isMe ? 'class="my-rank-row"' : '';
@@ -1545,14 +1629,13 @@
               <div class="rank-solved-wrap">
                 <div class="rank-solved-num-row">
                   <span class="rank-solved-num">${totalSolved}</span>
-                  <span class="rank-solved-unit">本</span>
+                  <span class="rank-solved-unit">問 正解</span>
                 </div>
                 <div class="rank-mini-bar-bg">
                   <div class="rank-mini-bar-fill ${barClass}" style="width: ${barWidth}%;"></div>
                 </div>
               </div>
             </td>
-            <td style="font-weight: bold; color: #1e293b;">${accStr}</td>
           </tr>
         `;
       }).join('');

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>熱血！分数1000本ノック 〜猛特訓編〜</title>
-  <link rel="stylesheet" href="css/style.css?v=20260928_1">
+  <link rel="stylesheet" href="css/style.css?v=20260928_2">
 </head>
 <body class="theme-nekketsu">
 
@@ -33,14 +33,14 @@
           <div class="knock-title-row">
             <span class="knock-status-label" id="knockStatusLabel">🔥 魂の1000本ノック 残り</span>
             <span class="knock-count-num" id="knockRemainingDisplay">1000</span>
-            <span class="knock-unit" id="knockUnit">本！！</span>
+            <span class="knock-unit" id="knockUnit">問！！</span>
           </div>
           <!-- スタジアム打球プログレスバー -->
           <div class="stadium-bar-wrap" title="打球が外野スタンドへ飛んでいく！">
             <div class="stadium-bar-fill" id="knockProgress"></div>
             <div class="stadium-ball-icon" id="knockBallIcon">⚾</div>
           </div>
-          <div class="knock-sub-text" id="knockSubText">打倒・分数の壁！ 0 / 1000 本</div>
+          <div class="knock-sub-text" id="knockSubText">打倒・分数の壁！ 0 / 1000 問正解</div>
         </div>
 
         <!-- スコア保存ボタン -->
@@ -184,21 +184,21 @@
 
         <!-- 猛特訓スコアボード（ダッシュボード） -->
         <div class="growth-dashboard comic-dashboard">
-          <!-- 1. 本日特打数 -->
+          <!-- 1. 本日正解数 -->
           <div class="growth-card comic-metric-card">
             <div class="growth-card-header">
-              <span>⚾ 本日の特打</span>
+              <span>⚾ 本日の正解</span>
               <span class="metric-tag">今日</span>
             </div>
-            <div class="growth-main-val" id="statTodaySolved">0本</div>
+            <div class="growth-main-val" id="statTodaySolved">0問</div>
             <div class="growth-sub-val" id="statTodayTime">特打時間: 0分</div>
             <div class="growth-badge normal" id="statSessionBadge">本日猛練習中！</div>
           </div>
 
-          <!-- 2. 通算打率（1発正解率） -->
+          <!-- 2. 1発正解率 -->
           <div class="growth-card comic-metric-card">
             <div class="growth-card-header">
-              <span>🎯 1発打率</span>
+              <span>🎯 1発正解率</span>
               <span class="metric-tag">今日</span>
             </div>
             <div class="growth-main-val" id="statTodayAcc">1.000</div>
@@ -217,13 +217,13 @@
             <div class="growth-badge normal" id="statSpeedBadge">打席分析中</div>
           </div>
 
-          <!-- 4. 通算特打本数（累計問題数） -->
+          <!-- 4. 累計正解問題数 -->
           <div class="growth-card comic-metric-card">
             <div class="growth-card-header">
-              <span>🏆 通算ノック</span>
+              <span>🏆 累計正解数</span>
               <span class="metric-tag">累計</span>
             </div>
-            <div class="growth-main-val" id="statAllSolved">0本</div>
+            <div class="growth-main-val" id="statAllSolved">0問</div>
             <div class="growth-sub-val" id="statAllTime">総特打時間: 0分</div>
             <div class="growth-badge faster" id="statComboBadge">連続 0 球ヒット！</div>
           </div>
@@ -408,7 +408,7 @@
         <div style="text-align: left;">
           <h2 style="font-size: 1.4rem;" class="comic-sub-title">🏆 熱血！1000本ノック猛者番付</h2>
           <p class="ranking-desc">
-            打倒・分数の壁！1000問完走後は<strong>「追加特打」</strong>の球数で限界突破ランキング！
+            打倒・分数の壁！空振り（ミス）しても諦めずに正解した<strong>「すべての問題数」</strong>で競うランキングだ！
           </p>
         </div>
         <button class="btn-header btn-comic" id="btnCloseRanking">✕ 閉じる</button>
@@ -419,7 +419,7 @@
         <div class="my-rank-badge" id="myRankBadge">第 - 位</div>
         <div class="my-rank-info">
           <div class="my-rank-name" id="myRankName">あなた</div>
-          <div class="my-rank-stat" id="myRankStat">通算 0本 (1000本まで あと 1000本！)</div>
+          <div class="my-rank-stat" id="myRankStat">累計正解数 0問 (1000問まで あと 1000問！)</div>
         </div>
       </div>
 
@@ -449,9 +449,8 @@
             <tr>
               <th style="width: 55px;">順位</th>
               <th>選手名</th>
-              <th>目標達成状況</th>
-              <th style="width: 140px;">特打本数</th>
-              <th style="width: 75px;">1発打率</th>
+              <th>1000問ノック達成状況</th>
+              <th style="width: 170px;">正解問題数</th>
             </tr>
           </thead>
           <tbody id="rankingTableBody">
@@ -464,9 +463,32 @@
       </div>
 
       <div class="log-modal-actions" style="justify-content: space-between; align-items: center; margin-top: 12px;">
-        <span class="ranking-footer-note">※1000問完走者は「追加特打（+〇問）」の猛者ゾーンに突入します！</span>
+        <span class="ranking-footer-note">※空振りしてもOK！何度間違えても、最後に正解したすべての問題数がカウントされます。1000問完走後は追加練習で競います！</span>
         <button class="btn-header btn-comic" id="btnCloseRankingBottom">閉じる</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ⚠️ ランキング5分制限・鬼監督の喝モーダル（リロードしても解除不可） -->
+  <div class="modal-overlay" id="rankingCooldownModal">
+    <div class="modal-content comic-modal" style="max-width: 440px;">
+      <div class="modal-icon">⚡</div>
+      <h2 style="font-size: 1.35rem; color: #dc2626;" class="comic-sub-title">鬼監督の喝！！</h2>
+      <div class="confirm-name-box comic-confirm-box" style="margin: 12px 0; background: #fff1f2; border-color: #f43f5e;">
+        <div style="font-size: 1.05rem; color: #9f1239; font-weight: 900; line-height: 1.5;">
+          「バカモン！！<br>ランキングばかり気にするな！！」
+        </div>
+        <div style="font-size: 0.88rem; color: #475569; margin-top: 6px; line-height: 1.4;">
+          順位をチラチラ見る暇があったら、<br>目の前の1問に集中してバットを振れ！！
+        </div>
+      </div>
+      <div class="cooldown-timer-box" style="background: #0f172a; color: #fde047; padding: 12px; border-radius: 8px; font-weight: bold; margin-bottom: 16px; border: 2px solid #ea580c;">
+        <div style="font-size: 0.8rem; color: #94a3b8;">【ランキングは 5分に1回 のみ解禁】</div>
+        <div style="font-size: 1.45rem; font-family: monospace; margin-top: 4px;" id="rankingCooldownTimerText">あと 4分 59秒</div>
+      </div>
+      <button type="button" class="auth-submit-btn btn-comic" id="btnCloseRankingCooldown">
+        はい！計算に戻ります！！ 🔥
+      </button>
     </div>
   </div>
 
@@ -475,11 +497,11 @@
   <audio id="audioHomerun" src="sound/homerun.mp3" preload="auto"></audio>
 
   <!-- スクリプト読み込み（assets.jsを先頭に配置） -->
-  <script src="js/assets.js?v=20260928_1"></script>
-  <script src="js/fraction.js?v=20260928_1"></script>
-  <script src="js/tracker.js?v=20260928_1"></script>
-  <script src="js/auth.js?v=20260928_1"></script>
-  <script src="js/sync.js?v=20260928_1"></script>
-  <script src="js/app.js?v=20260928_1"></script>
+  <script src="js/assets.js?v=20260928_2"></script>
+  <script src="js/fraction.js?v=20260928_2"></script>
+  <script src="js/tracker.js?v=20260928_2"></script>
+  <script src="js/auth.js?v=20260928_2"></script>
+  <script src="js/sync.js?v=20260928_2"></script>
+  <script src="js/app.js?v=20260928_2"></script>
 </body>
 </html>
