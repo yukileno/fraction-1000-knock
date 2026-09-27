@@ -471,8 +471,6 @@
       this.btnCloseRanking = document.getElementById('btnCloseRanking');
       this.btnCloseRankingBottom = document.getElementById('btnCloseRankingBottom');
       this.rankingClassFilter = document.getElementById('rankingClassFilter');
-      this.btnRefreshRanking = document.getElementById('btnRefreshRanking');
-      this.btnRefreshRankingText = document.getElementById('btnRefreshRankingText');
       this.rankingTableBody = document.getElementById('rankingTableBody');
       this.rankingEmptyMsg = document.getElementById('rankingEmptyMsg');
       this.myRankBanner = document.getElementById('myRankBanner');
@@ -483,9 +481,7 @@
 
       // ⚠️ ランキング5分制限・鬼監督の喝モーダル要素
       this.rankingCooldownModal = document.getElementById('rankingCooldownModal');
-      this.rankingCooldownTimerText = document.getElementById('rankingCooldownTimerText');
       this.btnCloseRankingCooldown = document.getElementById('btnCloseRankingCooldown');
-      this.rankingCooldownTimerId = null;
       this.rankingCooldownFromAuth = false;
     }
 
@@ -1172,9 +1168,6 @@
       if (this.rankingClassFilter) {
         this.rankingClassFilter.addEventListener('change', () => this.renderRankingTable());
       }
-      if (this.btnRefreshRanking) {
-        this.btnRefreshRanking.addEventListener('click', () => this.refreshRankingData());
-      }
       if (this.btnCloseRankingCooldown) {
         this.btnCloseRankingCooldown.addEventListener('click', () => this.hideRankingCooldownModal());
       }
@@ -1270,6 +1263,119 @@
       });
     }
 
+    // 小学生向け見やすい縦積み分数HTML生成（猛特訓記録・打席一覧用）
+    formatFractionHtml(frac) {
+      if (!frac && frac !== 0) return '';
+
+      let whole = 0;
+      let num = 0;
+      let den = 1;
+
+      if (typeof frac === 'object') {
+        whole = Number(frac.whole) || 0;
+        num = Number(frac.num) || 0;
+        den = Number(frac.den) || 1;
+      } else if (typeof frac === 'string') {
+        const s = frac.trim();
+        // 帯分数形式: "1と2/3" または "1 2/3"
+        const mixedMatch = s.match(/^(\d+)[と\s]+(\d+)\/(\d+)$/);
+        if (mixedMatch) {
+          whole = parseInt(mixedMatch[1], 10);
+          num = parseInt(mixedMatch[2], 10);
+          den = parseInt(mixedMatch[3], 10);
+        } else {
+          // 真分数・仮分数形式: "2/3"
+          const fracMatch = s.match(/^(\d+)\/(\d+)$/);
+          if (fracMatch) {
+            whole = 0;
+            num = parseInt(fracMatch[1], 10);
+            den = parseInt(fracMatch[2], 10);
+          } else {
+            // 整数形式: "5"
+            const intMatch = s.match(/^(\d+)$/);
+            if (intMatch) {
+              whole = parseInt(intMatch[1], 10);
+              num = 0;
+              den = 1;
+            } else {
+              return s;
+            }
+          }
+        }
+      } else if (typeof frac === 'number') {
+        return `<span class="table-fraction"><span class="tf-whole">${frac}</span></span>`;
+      }
+
+      // 整数のみ
+      if (num === 0 || den <= 1) {
+        return `<span class="table-fraction"><span class="tf-whole">${whole}</span></span>`;
+      }
+
+      // 分数部分あり
+      let html = '<span class="table-fraction">';
+      if (whole > 0) {
+        html += `<span class="tf-whole">${whole}</span>`;
+      }
+      html += `
+        <span class="tf-vfrac">
+          <span class="tf-num">${num}</span>
+          <span class="tf-den">${den}</span>
+        </span>
+      </span>`;
+      return html;
+    }
+
+    renderFormulaToHtml(prob) {
+      if (!prob) return '';
+
+      // 1. オブジェクトに frac1, frac2, op がある場合
+      const frac1 = prob.frac1 || prob.term1;
+      const frac2 = prob.frac2 || prob.term2;
+      const op = prob.op;
+
+      if (frac1 && frac2 && op) {
+        const opSym = (op === '+' || op === '＋') ? '＋' : '－';
+        return `
+          <span class="table-fraction-formula">
+            ${this.formatFractionHtml(frac1)}
+            <span class="tf-op">${opSym}</span>
+            ${this.formatFractionHtml(frac2)}
+          </span>
+        `;
+      }
+
+      // 2. 文字列 formula がある場合（例: "1と1/3 + 1/4" や "2/5 - 1/3"）
+      const formulaStr = typeof prob === 'string' ? prob : (prob.formula || '');
+      if (!formulaStr) return '';
+
+      const parts = formulaStr.split(/\s*([+\-＋－])\s*/);
+      if (parts.length >= 3) {
+        const leftFrac = parts[0];
+        const op = parts[1];
+        const rightFrac = parts[2];
+        const opSym = (op === '+' || op === '＋') ? '＋' : '－';
+        return `
+          <span class="table-fraction-formula">
+            ${this.formatFractionHtml(leftFrac)}
+            <span class="tf-op">${opSym}</span>
+            ${this.formatFractionHtml(rightFrac)}
+          </span>
+        `;
+      }
+
+      return formulaStr;
+    }
+
+    renderAnswerToHtml(prob) {
+      if (!prob) return '';
+      if (prob.answer) {
+        return this.formatFractionHtml(prob.answer);
+      }
+      const ansStr = typeof prob === 'string' ? prob : (prob.correctAnswer || '');
+      if (!ansStr) return '';
+      return this.formatFractionHtml(ansStr);
+    }
+
     renderLogTable() {
       const user = this.auth.getCurrentUser();
       let logs = this.tracker.getTodayLogs(user);
@@ -1291,14 +1397,14 @@
         const mistakeBadge = (log.mistakeCount === 0)
           ? '<span style="color:#15803d; font-weight:bold;">1発クリーンヒット⚾</span>'
           : `<span style="color:#b91c1c; font-weight:bold;">${log.mistakeCount}回空振り</span>`;
-        const formulaStr = log.problem ? (log.problem.formula || '') : '';
-        const answerStr = log.problem ? (log.problem.correctAnswer || '') : '';
+        const formulaHtml = this.renderFormulaToHtml(log.problem);
+        const answerHtml = this.renderAnswerToHtml(log.problem);
         const categoryStr = log.problem ? (log.problem.category || '分数計算') : '分数計算';
         return `
           <tr>
             <td>${timeStr}</td>
-            <td style="font-weight: bold;">${formulaStr}</td>
-            <td>${answerStr}</td>
+            <td style="font-weight: bold;">${formulaHtml}</td>
+            <td style="font-weight: bold;">${answerHtml}</td>
             <td>${log.timeSpentSeconds || 0}秒</td>
             <td>${mistakeBadge}</td>
             <td style="font-size: 0.8rem; color: #64748b;">${categoryStr}</td>
@@ -1325,50 +1431,17 @@
       }
     }
 
-    showRankingCooldownModal(remainingSec, fromAuth = false) {
+    showRankingCooldownModal(fromAuth = false) {
       this.rankingCooldownFromAuth = fromAuth;
       if (fromAuth && this.authModal) {
         this.authModal.classList.remove('active');
       }
-
-      if (this.rankingCooldownTimerId) {
-        clearInterval(this.rankingCooldownTimerId);
-        this.rankingCooldownTimerId = null;
-      }
-
-      const updateTimerText = () => {
-        const sec = this.getRankingCooldownRemainingSeconds();
-        if (sec <= 0) {
-          if (this.rankingCooldownTimerText) {
-            this.rankingCooldownTimerText.textContent = '解禁されました！バッターボックスへ！';
-          }
-          if (this.rankingCooldownTimerId) {
-            clearInterval(this.rankingCooldownTimerId);
-            this.rankingCooldownTimerId = null;
-          }
-          return;
-        }
-        const m = Math.floor(sec / 60);
-        const s = sec % 60;
-        const sStr = s < 10 ? `0${s}` : `${s}`;
-        if (this.rankingCooldownTimerText) {
-          this.rankingCooldownTimerText.textContent = `あと ${m}分 ${sStr}秒`;
-        }
-      };
-
-      updateTimerText();
-      this.rankingCooldownTimerId = setInterval(updateTimerText, 1000);
-
       if (this.rankingCooldownModal) {
         this.rankingCooldownModal.classList.add('active');
       }
     }
 
     hideRankingCooldownModal() {
-      if (this.rankingCooldownTimerId) {
-        clearInterval(this.rankingCooldownTimerId);
-        this.rankingCooldownTimerId = null;
-      }
       if (this.rankingCooldownModal) {
         this.rankingCooldownModal.classList.remove('active');
       }
@@ -1385,7 +1458,7 @@
       // ⚠️ 5分クールダウンチェック（リロードしてもlocalStorageの絶対時刻で判定するため回避不可）
       const remainingSec = this.getRankingCooldownRemainingSeconds();
       if (remainingSec > 0) {
-        this.showRankingCooldownModal(remainingSec, fromAuth);
+        this.showRankingCooldownModal(fromAuth);
         return;
       }
 
@@ -1428,39 +1501,6 @@
         }
       }
       this.rankingFromAuth = false;
-    }
-
-    async refreshRankingData() {
-      if (!this.btnRefreshRanking) return;
-      this.btnRefreshRanking.disabled = true;
-      if (this.btnRefreshRankingText) {
-        this.btnRefreshRankingText.textContent = '⏳ 更新中...';
-      }
-
-      try {
-        const users = await this.sync.fetchUsersFromSheet(12000);
-        if (users && users.length > 0) {
-          this.auth.syncWithRemoteUsers(users);
-        }
-        this.renderRankingTable();
-        if (this.btnRefreshRankingText) {
-          this.btnRefreshRankingText.textContent = '✅ 更新完了！';
-        }
-      } catch (e) {
-        console.warn('Failed to refresh ranking manually:', e);
-        if (this.btnRefreshRankingText) {
-          this.btnRefreshRankingText.textContent = '⚠️ 更新失敗';
-        }
-      } finally {
-        setTimeout(() => {
-          if (this.btnRefreshRanking) {
-            this.btnRefreshRanking.disabled = false;
-          }
-          if (this.btnRefreshRankingText) {
-            this.btnRefreshRankingText.textContent = '🔄 最新データ更新';
-          }
-        }, 1500);
-      }
     }
 
     renderRankingTable() {

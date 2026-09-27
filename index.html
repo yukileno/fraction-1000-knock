@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>熱血！分数1000本ノック 〜猛特訓編〜</title>
-  <link rel="stylesheet" href="css/style.css?v=20260928_2">
+  <link rel="stylesheet" href="css/style.css?v=20260928_3">
 </head>
 <body class="theme-nekketsu">
 
@@ -407,9 +407,6 @@
       <div class="ranking-modal-header">
         <div style="text-align: left;">
           <h2 style="font-size: 1.4rem;" class="comic-sub-title">🏆 熱血！1000本ノック猛者番付</h2>
-          <p class="ranking-desc">
-            打倒・分数の壁！空振り（ミス）しても諦めずに正解した<strong>「すべての問題数」</strong>で競うランキングだ！
-          </p>
         </div>
         <button class="btn-header btn-comic" id="btnCloseRanking">✕ 閉じる</button>
       </div>
@@ -423,7 +420,7 @@
         </div>
       </div>
 
-      <!-- 絞り込み ＆ 更新バー -->
+      <!-- クラス絞り込みバー -->
       <div class="ranking-control-bar">
         <div class="ranking-filter-group">
           <label for="rankingClassFilter" class="filter-label">表示:</label>
@@ -437,9 +434,6 @@
             <option value="5年6組">5年6組</option>
           </select>
         </div>
-        <button type="button" class="btn-ranking-refresh btn-comic" id="btnRefreshRanking">
-          <span id="btnRefreshRankingText">🔄 最新データ更新</span>
-        </button>
       </div>
 
       <!-- ランキングテーブル -->
@@ -462,8 +456,7 @@
         </div>
       </div>
 
-      <div class="log-modal-actions" style="justify-content: space-between; align-items: center; margin-top: 12px;">
-        <span class="ranking-footer-note">※空振りしてもOK！何度間違えても、最後に正解したすべての問題数がカウントされます。1000問完走後は追加練習で競います！</span>
+      <div class="log-modal-actions" style="justify-content: flex-end; margin-top: 12px;">
         <button class="btn-header btn-comic" id="btnCloseRankingBottom">閉じる</button>
       </div>
     </div>
@@ -475,16 +468,18 @@
       <div class="modal-icon">⚡</div>
       <h2 style="font-size: 1.35rem; color: #dc2626;" class="comic-sub-title">鬼監督の喝！！</h2>
       <div class="confirm-name-box comic-confirm-box" style="margin: 12px 0; background: #fff1f2; border-color: #f43f5e;">
-        <div style="font-size: 1.05rem; color: #9f1239; font-weight: 900; line-height: 1.5;">
-          「バカモン！！<br>ランキングばかり気にするな！！」
+        <div style="font-size: 1.1rem; color: #9f1239; font-weight: 900; line-height: 1.5;">
+          「ランキングばかり気にするな！！」
         </div>
-        <div style="font-size: 0.88rem; color: #475569; margin-top: 6px; line-height: 1.4;">
+        <div style="font-size: 0.9rem; color: #475569; margin-top: 6px; line-height: 1.4;">
           順位をチラチラ見る暇があったら、<br>目の前の1問に集中してバットを振れ！！
         </div>
       </div>
-      <div class="cooldown-timer-box" style="background: #0f172a; color: #fde047; padding: 12px; border-radius: 8px; font-weight: bold; margin-bottom: 16px; border: 2px solid #ea580c;">
-        <div style="font-size: 0.8rem; color: #94a3b8;">【ランキングは 5分に1回 のみ解禁】</div>
-        <div style="font-size: 1.45rem; font-family: monospace; margin-top: 4px;" id="rankingCooldownTimerText">あと 4分 59秒</div>
+      <div class="cooldown-timer-box" style="background: #0f172a; color: #fde047; padding: 12px; border-radius: 8px; font-weight: bold; margin-bottom: 16px; border: 2px solid #ea580c; text-align: center;">
+        <div style="font-size: 0.95rem; color: #fde047; line-height: 1.5;">
+          【猛特訓ルール】<br>
+          ランキングは <span style="color: #fb923c; font-size: 1.1rem;">5分に1回</span> だけ見ることができます！
+        </div>
       </div>
       <button type="button" class="auth-submit-btn btn-comic" id="btnCloseRankingCooldown">
         はい！計算に戻ります！！ 🔥
@@ -497,11 +492,11 @@
   <audio id="audioHomerun" src="sound/homerun.mp3" preload="auto"></audio>
 
   <!-- スクリプト読み込み（assets.jsを先頭に配置） -->
-  <script src="js/assets.js?v=20260928_2"></script>
-  <script src="js/fraction.js?v=20260928_2"></script>
-  <script src="js/tracker.js?v=20260928_2"></script>
-  <script src="js/auth.js?v=20260928_2"></script>
-  <script src="js/sync.js?v=20260928_2"></script>
-  <script src="js/app.js?v=20260928_2"></script>
+  <script src="js/assets.js?v=20260928_3"></script>
+  <script src="js/fraction.js?v=20260928_3"></script>
+  <script src="js/tracker.js?v=20260928_3"></script>
+  <script src="js/auth.js?v=20260928_3"></script>
+  <script src="js/sync.js?v=20260928_3"></script>
+  <script src="js/app.js?v=20260928_3"></script>
 </body>
 </html>

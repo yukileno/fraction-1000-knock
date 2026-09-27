@@ -906,6 +906,70 @@ canvas#scratchCanvas {
   padding: 6px 8px;
   border: 1px solid #cbd5e1;
   text-align: center;
+  vertical-align: middle;
+}
+
+/* 猛特訓記録・表用の小学生向け縦積み分数スタイル */
+.table-fraction-formula {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-family: inherit;
+  vertical-align: middle;
+}
+
+.table-fraction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.tf-whole {
+  font-size: 1.15rem;
+  margin-right: 2px;
+  font-weight: 900;
+  line-height: 1;
+  color: #0f172a;
+}
+
+.tf-vfrac {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+.tf-num {
+  font-size: 0.82rem;
+  line-height: 1;
+  padding: 0 3px 1px 3px;
+  border-bottom: 2px solid #0f172a;
+  text-align: center;
+  min-width: 13px;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.tf-den {
+  font-size: 0.82rem;
+  line-height: 1;
+  padding: 1px 3px 0 3px;
+  text-align: center;
+  min-width: 13px;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.tf-op {
+  font-size: 1.05rem;
+  color: #dc2626;
+  margin: 0 2px;
+  font-weight: 900;
 }
 
 .log-table-wrap {
@@ -1838,10 +1902,10 @@ canvas#scratchCanvas {
   margin-top: 2px;
 }
 
-/* コントロールバー（クラス絞り込み・更新） */
+/* コントロールバー（クラス絞り込み） */
 .ranking-control-bar {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
   gap: 12px;
   margin-bottom: 10px;
