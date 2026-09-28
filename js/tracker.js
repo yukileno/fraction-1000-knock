@@ -240,6 +240,15 @@
       };
 
       this.saveProblemLog(logEntry);
+
+      // 💥【リアルタイム即時更新の絶対保証】
+      // 正解したその瞬間にウォーターマーク（最高正解数）を即座にインクリメント！
+      if (!this.solvedWatermarks) this.solvedWatermarks = {};
+      const uKey = (user && user.studentNumber)
+        ? `${this.normalizeClassName(user.className)}_${user.studentNumber}`
+        : 'default';
+      this.solvedWatermarks[uKey] = (this.solvedWatermarks[uKey] || 0) + 1;
+
       return logEntry;
     }
 
@@ -278,7 +287,7 @@
         const targetClass = this.normalizeClassName(user.className);
         const targetNum = Number(user.studentNumber);
         logs = logs.filter(l => {
-          // 古い形式のログ（className/studentNumber未保存）は救済表示
+          // 旧形式のログ（className/studentNumber未保存）は救済表示
           if (!l.className && !l.studentNumber) return true;
           const logClass = this.normalizeClassName(l.className);
           const logNum = Number(l.studentNumber);
@@ -327,6 +336,10 @@
       if (!user || !user.studentNumber) return;
       const targetClass = this.normalizeClassName(user.className);
       const targetNum = Number(user.studentNumber);
+      const uKey = `${targetClass}_${targetNum}`;
+      if (this.solvedWatermarks) delete this.solvedWatermarks[uKey];
+      if (this.minuteWatermarks) delete this.minuteWatermarks[uKey];
+
       const allLogs = this.getAllLogs();
       // 同期済み（syncedToSheet: true）の古いログのみを破棄し、未送信ログ（オフライン作業分）は保護
       const keptLogs = allLogs.filter(l => {
@@ -373,17 +386,28 @@
       const unsyncedCount = unsyncedLogs.length;
       const unsyncedSec = unsyncedLogs.reduce((sum, l) => sum + (l.timeSpentSeconds || 0), 0);
 
-      let totalKnocksDone = 0;
-      let combinedTotalMinutes = 0;
+      const user = userInfo || this.currentUser;
+      const uKey = (user && user.studentNumber)
+        ? `${this.normalizeClassName(user.className)}_${user.studentNumber}`
+        : 'default';
+      if (!this.solvedWatermarks) this.solvedWatermarks = {};
+      if (!this.minuteWatermarks) this.minuteWatermarks = {};
+
+      let calculatedSolved = 0;
+      let calculatedMinutes = 0;
 
       if (userInfo && userInfo.summary && (userInfo.summary.totalSolved !== undefined && userInfo.summary.totalSolved !== null)) {
         const s = userInfo.summary;
         const remoteSolved = Number(s.totalSolved) || 0;
         const remoteMinutes = Number(s.totalMinutes) || 0;
 
-        // 通算正解数 = スプレッドシート確定値 ＋ 未送信ログ数（オフライン中に解いた分が絶対に消えない）
-        totalKnocksDone = remoteSolved + unsyncedCount;
-        combinedTotalMinutes = Math.round((remoteMinutes + (unsyncedSec / 60)) * 10) / 10;
+        // 通算正解数 = スプレッドシート確定値 ＋ 未送信ログ数
+        // かつ、少なくとも「今日この端末で解いた数（todayStats.count）」を下回ることは絶対にない！
+        calculatedSolved = Math.max(remoteSolved + unsyncedCount, todayStats.count);
+        calculatedMinutes = Math.max(
+          Math.round((remoteMinutes + (unsyncedSec / 60)) * 10) / 10,
+          todayStats.totalMinutes
+        );
 
         // 通算打率・スイング速度もスプレッドシートの値を最優先（マスター）とする
         if (s.accuracy !== null && s.accuracy !== undefined) {
@@ -395,13 +419,24 @@
         pastStats.count = remoteSolved;
         pastStats.totalMinutes = remoteMinutes;
       } else {
-        // 🌟 スプレッドシート側に名簿がない場合（新規登録、またはスプレッドシート側で削除された児童）
-        // 過去の同期済みログは引き継がず、未送信のログのみ（＝新規なら0問）からクリーンに開始！
-        totalKnocksDone = unsyncedCount;
-        combinedTotalMinutes = Math.round((unsyncedSec / 60) * 10) / 10;
+        // スプレッドシート側に名簿がない場合（新規登録、またはスプレッドシート側で削除された児童）でも、
+        // 今日解いた正解数は確実にリアルタイム即時反映！
+        calculatedSolved = todayStats.count;
+        calculatedMinutes = todayStats.totalMinutes;
         pastStats.count = 0;
         pastStats.totalMinutes = 0;
       }
+
+      // 💥【リアルタイム即時更新＆単調増加ウォーターマーク保証】
+      // 正解した瞬間に加算された値や過去の最高正解数を決して下回らない
+      // （送信完了時の一時的な未反映・再フェッチ待ちでも絶対に巻き戻らない！）
+      const watermarkSolved = this.solvedWatermarks[uKey] || 0;
+      const totalKnocksDone = Math.max(calculatedSolved, watermarkSolved);
+      this.solvedWatermarks[uKey] = totalKnocksDone;
+
+      const watermarkMinutes = this.minuteWatermarks[uKey] || 0;
+      const combinedTotalMinutes = Math.max(calculatedMinutes, watermarkMinutes);
+      this.minuteWatermarks[uKey] = combinedTotalMinutes;
 
       // 1000本ノックのカウントダウン＆カウントアップ計算
       const target = this.targetKnocks;

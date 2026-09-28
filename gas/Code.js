@@ -131,6 +131,9 @@ function doGet(e) {
       var userSheet = getOrCreateUserSheet(ss);
       var users = [];
       if (userSheet) {
+        // E〜J列に関数が未設定の行があれば自動修復・適用
+        ensureUserSheetFormulas(userSheet);
+
         var values = userSheet.getDataRange().getValues();
         // 1行目はヘッダー
         for (var i = 1; i < values.length; i++) {
@@ -261,6 +264,17 @@ function doGet(e) {
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
+    // 6. 「児童名簿」シートの全行（E〜J列）に自動計算式を一括強制適用
+    if (action === 'apply_formulas') {
+      var uSheet = getOrCreateUserSheet(ss);
+      var formulaRes = ensureUserSheetFormulas(uSheet, true);
+      return ContentService.createTextOutput(JSON.stringify({
+        status: 'success',
+        message: '児童名簿の全行（E〜J列）に自動計算式を一括適用しました。',
+        appliedRows: formulaRes.appliedRows
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
     // デフォルト: 稼働ステータス確認
     return ContentService.createTextOutput(JSON.stringify({
       status: 'ok',
@@ -279,22 +293,35 @@ function doGet(e) {
 // --- 児童名簿シートの自動計算式設定（GAS軽量化・同時実行制限対策） ---
 
 /**
- * ⚡ 「児童名簿」シートの全生徒行（E〜J列）にスプレッドシート関数を一括セット
- * （GASのループ集計を撤廃し、同時30件制限を根本回避する超高速化設計）
+ * ⚡ 「児童名簿」シートの全生徒行（E〜J列）にスプレッドシート関数を適用・保証
+ * - forceAll が true の場合は全行に強制上書き
+ * - false の場合は数式が未設定または空の行がある場合のみ自動適用
  */
-function applyUserSheetFormulas() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var userSheet = getOrCreateUserSheet(ss);
+function ensureUserSheetFormulas(userSheet, forceAll) {
+  if (!userSheet) return { appliedRows: 0 };
   var lastRow = userSheet.getLastRow();
-
-  if (lastRow <= 1) {
-    SpreadsheetApp.getUi().alert('児童名簿にデータがありません。クラスと番号を入力してください。');
-    return;
-  }
+  if (lastRow <= 1) return { appliedRows: 0 };
 
   var numRows = lastRow - 1;
-  var formulas = [];
+  var existingFormulas = userSheet.getRange(2, 5, numRows, 6).getFormulas();
+  var needsUpdate = !!forceAll;
 
+  if (!needsUpdate) {
+    for (var i = 0; i < numRows; i++) {
+      // E〜J列のいずれかに数式が入っていない場合、更新対象とする
+      if (!existingFormulas[i][0] || !existingFormulas[i][1] || !existingFormulas[i][2] ||
+          !existingFormulas[i][3] || !existingFormulas[i][4] || !existingFormulas[i][5]) {
+        needsUpdate = true;
+        break;
+      }
+    }
+  }
+
+  if (!needsUpdate) {
+    return { appliedRows: 0 };
+  }
+
+  var formulas = [];
   for (var r = 2; r <= lastRow; r++) {
     formulas.push([
       "=COUNTIFS('計算ドリル記録'!$B:$B, $B" + r + ", '計算ドリル記録'!$C:$C, $C" + r + ")",
@@ -307,129 +334,31 @@ function applyUserSheetFormulas() {
   }
 
   userSheet.getRange(2, 5, numRows, 6).setFormulas(formulas);
+  return { appliedRows: numRows };
+}
+
+/**
+ * ⚡ 「児童名簿」シートの全生徒行（E〜J列）にスプレッドシート関数を一括セット（メニュー用）
+ */
+function applyUserSheetFormulas() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var userSheet = getOrCreateUserSheet(ss);
+  var res = ensureUserSheetFormulas(userSheet, true);
+
+  if (res.appliedRows === 0) {
+    SpreadsheetApp.getUi().alert('児童名簿にデータがありません。クラスと番号を入力してください。');
+    return;
+  }
 
   SpreadsheetApp.getUi().alert(
-    '⚡ 児童名簿（2行目〜' + lastRow + '行目）に自動計算式を一括設定しました！\n\n' +
+    '⚡ 児童名簿（2行目〜' + (res.appliedRows + 1) + '行目）に自動計算式を一括設定しました！\n\n' +
     '・原本ログからリアルタイムで自動集計されます\n' +
     '・GASの通信負荷が最小化され、混雑時の安定性が大幅に向上しました。'
   );
 }
 
-// --- 児童名簿シートの累計サマリー自動集計 ---
-
 /**
- * 今回送信された学習ログをもとに、児童名簿シートの累計実績（E〜J列）を即時更新
- */
-function updateUserSummariesFromLogs(ss, logs) {
-  var userSheet = getOrCreateUserSheet(ss);
-  var values = userSheet.getDataRange().getValues();
-
-  // 児童ごとに今回のログを集計
-  var studentDeltas = {};
-  for (var i = 0; i < logs.length; i++) {
-    var l = logs[i];
-    var c = l.className;
-    var n = l.studentNumber;
-    if (!c || !n) continue;
-
-    var key = c + '_' + n;
-    if (!studentDeltas[key]) {
-      studentDeltas[key] = {
-        className: c,
-        studentNumber: Number(n),
-        nickname: l.nickname || l.studentName || '',
-        solved: 0,
-        seconds: 0,
-        mistakes: 0,
-        firstTry: 0,
-        lastTime: new Date(l.timestamp || Date.now())
-      };
-    }
-
-    var item = studentDeltas[key];
-    item.solved += 1;
-    item.seconds += (Number(l.timeSpentSeconds) || 0);
-    item.mistakes += (Number(l.mistakeCount) || 0);
-    if ((Number(l.mistakeCount) || 0) === 0) {
-      item.firstTry += 1;
-    }
-    var logDate = new Date(l.timestamp || Date.now());
-    if (logDate > item.lastTime) {
-      item.lastTime = logDate;
-    }
-  }
-
-  // 既存行のマップ作成 (key -> rowNumber)
-  var rowMap = {};
-  for (var r = 1; r < values.length; r++) {
-    var k = String(values[r][1]) + '_' + String(values[r][2]);
-    rowMap[k] = r + 1; // 1-indexed行番号
-  }
-
-  // 各児童の累計値を加算・更新
-  for (var key in studentDeltas) {
-    var delta = studentDeltas[key];
-    if (rowMap[key]) {
-      var rIdx = rowMap[key];
-      var oldRow = values[rIdx - 1];
-
-      var oldSolved = Number(oldRow[4]) || 0;
-      var oldMinutes = Number(oldRow[5]) || 0;
-      var oldAcc = (oldRow[6] !== '' && !isNaN(oldRow[6])) ? Number(oldRow[6]) : null;
-      var oldAvgSec = (oldRow[7] !== '' && !isNaN(oldRow[7])) ? Number(oldRow[7]) : null;
-      var oldMistakes = Number(oldRow[8]) || 0;
-
-      // 既存の合計秒数・一発正解数を推計復元
-      var oldTotalSec = (oldAvgSec !== null && oldSolved > 0) ? (oldAvgSec * oldSolved) : (oldMinutes * 60);
-      var oldFirstTry = (oldAcc !== null && oldSolved > 0) ? Math.round(oldSolved * oldAcc / 100) : 0;
-
-      var newSolved = oldSolved + delta.solved;
-      var newTotalSec = oldTotalSec + delta.seconds;
-      var newFirstTry = oldFirstTry + delta.firstTry;
-      var newMistakes = oldMistakes + delta.mistakes;
-
-      var newMinutes = Math.round((newTotalSec / 60) * 10) / 10;
-      var newAcc = newSolved > 0 ? Math.round((newFirstTry / newSolved) * 100) : 100;
-      var newAvgSec = newSolved > 0 ? Math.round(newTotalSec / newSolved) : 0;
-
-      // E〜J列を一括更新
-      userSheet.getRange(rIdx, 1).setValue(new Date()); // A列: 最終更新
-      if (delta.nickname && !oldRow[3]) {
-        userSheet.getRange(rIdx, 4).setValue(delta.nickname); // D列
-      }
-      userSheet.getRange(rIdx, 5, 1, 6).setValues([[
-        newSolved,
-        newMinutes,
-        newAcc,
-        newAvgSec,
-        newMistakes,
-        delta.lastTime
-      ]]);
-    } else {
-      // 児童名簿に未登録の場合は新規追加
-      var acc = delta.solved > 0 ? Math.round((delta.firstTry / delta.solved) * 100) : 100;
-      var avg = delta.solved > 0 ? Math.round(delta.seconds / delta.solved) : 0;
-      var mins = Math.round((delta.seconds / 60) * 10) / 10;
-
-      userSheet.appendRow([
-        new Date(),
-        delta.className,
-        delta.studentNumber,
-        delta.nickname,
-        delta.solved,
-        mins,
-        acc,
-        avg,
-        delta.mistakes,
-        delta.lastTime
-      ]);
-    }
-  }
-}
-
-/**
- * 👥 「計算ドリル記録」の全過去ログから「児童名簿」の累計実績を完全再集計
- * （手動メンテ・初期同期用）
+ * 👥 「計算ドリル記録」の全過去ログから未登録児童を名簿に追加し、全行に関数を再適用
  */
 function recalculateAllUserSummaries() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -447,41 +376,6 @@ function recalculateAllUserSummaries() {
     return;
   }
 
-  // 全ログから集計
-  // A:日時, B:クラス, C:番号, D:ニックネーム, ..., I:秒数, J:ミス, K:セッション, L:日付
-  var summary = {};
-  for (var i = 1; i < logValues.length; i++) {
-    var r = logValues[i];
-    var c = String(r[1]).trim();
-    var n = Number(r[2]);
-    if (!c || !n) continue;
-
-    var key = c + '_' + n;
-    if (!summary[key]) {
-      summary[key] = {
-        className: c,
-        studentNumber: n,
-        nickname: String(r[3] || ''),
-        solved: 0,
-        seconds: 0,
-        mistakes: 0,
-        firstTry: 0,
-        lastTime: new Date(r[0] || Date.now())
-      };
-    }
-
-    var item = summary[key];
-    item.solved += 1;
-    item.seconds += (Number(r[8]) || 0);
-    item.mistakes += (Number(r[9]) || 0);
-    if ((Number(r[9]) || 0) === 0) item.firstTry += 1;
-
-    var curDate = new Date(r[0]);
-    if (curDate > item.lastTime) item.lastTime = curDate;
-    if (r[3] && !item.nickname) item.nickname = String(r[3]);
-  }
-
-  // 名簿シートの既存データと照合
   var userValues = userSheet.getDataRange().getValues();
   var rowMap = {};
   for (var u = 1; u < userValues.length; u++) {
@@ -489,50 +383,40 @@ function recalculateAllUserSummaries() {
     rowMap[k] = u + 1;
   }
 
-  var updatedCount = 0;
   var insertedCount = 0;
+  for (var i = 1; i < logValues.length; i++) {
+    var r = logValues[i];
+    var c = String(r[1]).trim();
+    var n = Number(r[2]);
+    if (!c || !n) continue;
 
-  for (var sKey in summary) {
-    var s = summary[sKey];
-    var acc = s.solved > 0 ? Math.round((s.firstTry / s.solved) * 100) : 100;
-    var avg = s.solved > 0 ? Math.round(s.seconds / s.solved) : 0;
-    var mins = Math.round((s.seconds / 60) * 10) / 10;
-
-    if (rowMap[sKey]) {
-      var rowIdx = rowMap[sKey];
-      userSheet.getRange(rowIdx, 5, 1, 6).setValues([[
-        s.solved,
-        mins,
-        acc,
-        avg,
-        s.mistakes,
-        s.lastTime
-      ]]);
-      if (s.nickname && !userValues[rowIdx - 1][3]) {
-        userSheet.getRange(rowIdx, 4).setValue(s.nickname);
-      }
-      updatedCount++;
-    } else {
+    var sKey = c + '_' + n;
+    if (!rowMap[sKey]) {
+      var newR = userSheet.getLastRow() + 1;
       userSheet.appendRow([
         new Date(),
-        s.className,
-        s.studentNumber,
-        s.nickname,
-        s.solved,
-        mins,
-        acc,
-        avg,
-        s.mistakes,
-        s.lastTime
+        c,
+        n,
+        String(r[3] || '児童'),
+        "=COUNTIFS('計算ドリル記録'!$B:$B, $B" + newR + ", '計算ドリル記録'!$C:$C, $C" + newR + ")",
+        "=IF($E" + newR + ">0, ROUND(SUMIFS('計算ドリル記録'!$I:$I, '計算ドリル記録'!$B:$B, $B" + newR + ", '計算ドリル記録'!$C:$C, $C" + newR + ")/60, 1), 0)",
+        "=IF($E" + newR + ">0, ROUND(COUNTIFS('計算ドリル記録'!$B:$B, $B" + newR + ", '計算ドリル記録'!$C:$C, $C" + newR + ", '計算ドリル記録'!$J:$J, 0) / $E" + newR + " * 100), 100)",
+        "=IF($E" + newR + ">0, ROUND(SUMIFS('計算ドリル記録'!$I:$I, '計算ドリル記録'!$B:$B, $B" + newR + ", '計算ドリル記録'!$C:$C, $C" + newR + ") / $E" + newR + "), 0)",
+        "=SUMIFS('計算ドリル記録'!$J:$J, '計算ドリル記録'!$B:$B, $B" + newR + ", '計算ドリル記録'!$C:$C, $C" + newR + ")",
+        "=IF($E" + newR + ">0, IFERROR(TEXT(MAXIFS('計算ドリル記録'!$A:$A, '計算ドリル記録'!$B:$B, $B" + newR + ", '計算ドリル記録'!$C:$C, $C" + newR + "), \"yyyy-mm-dd hh:mm\"), \"\"), \"\")"
       ]);
+      rowMap[sKey] = newR;
       insertedCount++;
     }
   }
 
+  // 全行の数式を再確認・保証
+  var res = ensureUserSheetFormulas(userSheet, true);
+
   SpreadsheetApp.getUi().alert(
-    '児童名簿の累計実績の再集計が完了しました！\n\n' +
-    '・更新: ' + updatedCount + ' 名\n' +
-    '・新規追加: ' + insertedCount + ' 名'
+    '児童名簿の自動計算式設定および未登録児童の同期が完了しました！\n\n' +
+    '・数式適用行: ' + res.appliedRows + ' 件\n' +
+    '・新規名簿追加: ' + insertedCount + ' 名'
   );
 }
 
