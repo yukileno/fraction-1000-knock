@@ -321,7 +321,7 @@
   // --- バッティングマネージャー本体 ---
   class BattingGameManager {
     constructor(options = {}) {
-      this.sound = options.sound || new BattingSoundEngine();
+      this.sound = new BattingSoundEngine();
       this.getUsersCallback = options.getUsers || (() => []);
       this.onCompleteCallback = options.onComplete || (() => {});
 
@@ -891,16 +891,27 @@
 
     // --- メイン開始メソッド ---
     start(playerStats = {}) {
+      console.log('⚾ [BattingGameManager] start() triggered! Stats:', playerStats);
       this.clearBattingTimers();
+      this.initDom(); // 最新のDOM要素を確実に再取得
       this.bBattingActive = true;
       this.setBattingCameraMode('BATTER');
-      this.resizeBattingCanvas();
 
-      if (this.dom.screenBatting) {
-        this.dom.screenBatting.classList.remove('hide');
+      const screen = this.dom.screenBatting || document.getElementById('screen-batting');
+      if (screen) {
+        screen.classList.remove('hide');
+        screen.style.display = 'block';
       }
 
-      this.sound.playFever();
+      this.resizeBattingCanvas();
+
+      try {
+        if (this.sound && typeof this.sound.playFever === 'function') {
+          this.sound.playFever();
+        }
+      } catch (e) {
+        console.warn('Sound playFever error:', e);
+      }
 
       if (this.dom.battingCanvas) {
         this.bCtx = this.dom.battingCanvas.getContext('2d');

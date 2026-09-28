@@ -334,10 +334,13 @@
       // 野球対決ステージ（ピッチャー vs バッター）マネージャー
       this.showdown = new BaseballShowdown(this.sound);
 
+      // セッション正解数カウント（アプリ起動後・ユーザー切り替え後に解いた問数）
+      this.sessionSolvedCount = 0;
+      this.lastBattingTriggerSolved = -1;
+
       // 🌟 1球入魂！ご褒美バッティングミニゲーム（5問に1回発動）マネージャー
       if (typeof BattingGameManager !== 'undefined') {
         this.battingGame = new BattingGameManager({
-          sound: this.sound,
           getUsers: () => this.auth ? this.auth.getAllUsers() : [],
           onComplete: (res) => {
             if (res && res.isHr) {
@@ -577,6 +580,8 @@
     onLoginComplete(user, isNew = false) {
       this.hideAuthModal();
       this.studentDisplayName.textContent = `⚾ 背番号${user.studentNumber}番 ${user.nickname} 選手`;
+      this.sessionSolvedCount = 0;
+      this.lastBattingTriggerSolved = -1;
       this.tracker.setCurrentUser(user);
       this.showdown.setBatterName(user.nickname);
       this.updateGrowthDashboard();
@@ -838,15 +843,34 @@
           }
 
           // 🌟 5問に1回、ご褒美バッティングミニゲーム（1球入魂）へ突入！
-          const todayCount = stats ? stats.today.count : 0;
-          if (todayCount % 5 === 0 && todayCount > 0 && this.battingGame) {
+          this.sessionSolvedCount = (this.sessionSolvedCount || 0) + 1;
+          const allCount = (stats && stats.all) ? stats.all.count : 0;
+          const todayCount = (stats && stats.today) ? stats.today.count : 0;
+
+          // 条件：
+          // 1. 今のセッションで5問解くごと (5, 10, 15...)
+          // 2. 通算累計正解数が5の倍数に達した (5, 10, 15...)
+          // 3. 本日の正解数が5の倍数に達した (5, 10, 15...)
+          // ※同じ問数での二重発動を防ぐために lastBattingTriggerSolved を更新
+          const isSessionHit = this.sessionSolvedCount > 0 && this.sessionSolvedCount % 5 === 0;
+          const isAllHit = allCount > 0 && allCount % 5 === 0 && this.lastBattingTriggerSolved !== allCount;
+          const isTodayHit = todayCount > 0 && todayCount % 5 === 0 && this.lastBattingTriggerSolved !== allCount;
+
+          if ((isSessionHit || isAllHit || isTodayHit) && this.battingGame) {
+            this.lastBattingTriggerSolved = allCount;
             this.tracker.stop(); // ドリルのタイマーを一時停止
+            console.log(`⚾ ご褒美バッティング発動！ [セッション正解: ${this.sessionSolvedCount}, 通算: ${allCount}, 本日: ${todayCount}]`);
             setTimeout(() => {
-              this.battingGame.start({
-                totalSolved: stats.all.count,
-                todayCount: todayCount,
-                nickname: user ? user.nickname : ''
-              });
+              try {
+                this.battingGame.start({
+                  totalSolved: allCount,
+                  todayCount: todayCount,
+                  nickname: user ? user.nickname : ''
+                });
+              } catch (err) {
+                console.error('Batting start error, recovering drill:', err);
+                this.nextProblem();
+              }
             }, 1200);
             return;
           }
