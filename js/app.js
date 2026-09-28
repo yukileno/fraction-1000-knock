@@ -334,6 +334,24 @@
       // 野球対決ステージ（ピッチャー vs バッター）マネージャー
       this.showdown = new BaseballShowdown(this.sound);
 
+      // 🌟 1球入魂！ご褒美バッティングミニゲーム（5問に1回発動）マネージャー
+      if (typeof BattingGameManager !== 'undefined') {
+        this.battingGame = new BattingGameManager({
+          sound: this.sound,
+          getUsers: () => this.auth ? this.auth.getAllUsers() : [],
+          onComplete: (res) => {
+            if (res && res.isHr) {
+              this.setCoachSpeech(`「うおおお！特大ホームラン（${res.distance}m）だ！！次の問題もその調子で行け！！」`);
+            } else if (res && res.result === 'HIT') {
+              this.setCoachSpeech(`「ナイスバッティング！クリーンヒットだ！次の問題も集中！！」`);
+            } else {
+              this.setCoachSpeech(`「ドンマイ！次の5問でリベンジだ！！さあ計算に戻るぞ！！」`);
+            }
+            this.nextProblem();
+          }
+        });
+      }
+
       this.initElements();
       this.populateNumberSelect();
 
@@ -819,6 +837,20 @@
             }, 800);
           }
 
+          // 🌟 5問に1回、ご褒美バッティングミニゲーム（1球入魂）へ突入！
+          const todayCount = stats ? stats.today.count : 0;
+          if (todayCount % 5 === 0 && todayCount > 0 && this.battingGame) {
+            this.tracker.stop(); // ドリルのタイマーを一時停止
+            setTimeout(() => {
+              this.battingGame.start({
+                totalSolved: stats.all.count,
+                todayCount: todayCount,
+                nickname: user ? user.nickname : ''
+              });
+            }, 1200);
+            return;
+          }
+
           setTimeout(() => {
             this.nextProblem();
           }, 1100);
@@ -1113,6 +1145,9 @@
         if (this.goalModal && this.goalModal.classList.contains('active')) return;
         if (this.rankingModal && this.rankingModal.classList.contains('active')) return;
         if (this.rankingCooldownModal && this.rankingCooldownModal.classList.contains('active')) return;
+
+        // 💥 バッティングミニゲーム中はドリル側のキー入力を無効化
+        if (this.battingGame && this.battingGame.bBattingActive) return;
 
         // ニックネーム入力欄などにフォーカスがある場合はスキップ
         if (document.activeElement && document.activeElement === this.inputNickname) {

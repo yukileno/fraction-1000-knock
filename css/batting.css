@@ -1,0 +1,820 @@
+/* ===== 1球入魂バッティング ミニゲーム スタイル ===== */
+
+#screen-batting.hide {
+  display: none !important;
+}
+#screen-batting:not(.hide) {
+  display: block !important;
+}
+/* ==========================================================================
+   6. ご褒美バッティング画面 (screen-batting) & 実況カメラ演出
+   ========================================================================== */
+#screen-batting {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: #000;
+  z-index: 25;
+}
+
+.batting-layer {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  transition: opacity 0.35s ease;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.batting-layer.active {
+  opacity: 1;
+}
+
+.batting-bg-img {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  filter: brightness(0.7) contrast(1.1);
+  transition: transform 0.4s ease-out;
+}
+
+.batting-bg-img.broadcast-cam {
+  filter: brightness(0.85) contrast(1.15);
+  transform: scale(1.05);
+}
+
+.batting-overlay {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: radial-gradient(circle at 50% 40%, rgba(0, 30, 70, 0.15) 0%, rgba(5, 10, 20, 0.85) 100%);
+  z-index: 2;
+}
+
+#batting-impact-flash {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: #ffffff;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 45;
+  transition: opacity 0.25s ease-out;
+}
+
+#batting-impact-flash.flash {
+  opacity: 0.92;
+  transition: none;
+}
+
+#batting-canvas {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 5;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+/* 10問達成！ご褒美バッティング上部バー */
+.batting-header-bar {
+  position: absolute;
+  top: 10px; left: 50%;
+  transform: translateX(-50%);
+  z-index: 22;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(8, 14, 26, 0.94);
+  border: 2px solid var(--gold);
+  border-radius: 30px;
+  padding: 6px 20px;
+  box-shadow: 0 4px 25px rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(6px);
+  white-space: nowrap;
+}
+
+.batting-reward-badge {
+  font-size: 0.85rem;
+  font-weight: 900;
+  background: linear-gradient(135deg, #ff334b, #d90429);
+  color: #fff;
+  padding: 3px 12px;
+  border-radius: 12px;
+  box-shadow: 0 0 10px rgba(255, 51, 75, 0.6);
+  letter-spacing: 0.5px;
+}
+
+.batting-power-badge {
+  font-size: 0.8rem;
+  color: var(--accent-blue);
+  font-weight: bold;
+}
+
+.batting-sub-msg {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+/* 対決相手投手HUD（プロスピ風VSネームプレート） */
+.batting-rival-card {
+  position: absolute;
+  top: 52px; left: 50%;
+  transform: translateX(-50%);
+  z-index: 22;
+  background: linear-gradient(135deg, rgba(10, 18, 36, 0.95), rgba(18, 28, 54, 0.95));
+  border: 2px solid #00d2ff;
+  border-radius: 12px;
+  padding: 6px 16px;
+  box-shadow: 0 4px 25px rgba(0, 210, 255, 0.4), 0 6px 20px rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 320px;
+  max-width: 90%;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+}
+
+.batting-rival-card.hide-rival {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-15px);
+}
+
+.rival-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding-bottom: 3px;
+}
+
+.rival-tag {
+  font-size: 0.75rem;
+  font-weight: 900;
+  color: #ff334b;
+  letter-spacing: 0.5px;
+  text-shadow: 0 0 8px rgba(255, 51, 75, 0.6);
+}
+
+.rival-rank-badge {
+  font-size: 0.85rem;
+  font-weight: 900;
+  padding: 1px 10px;
+  border-radius: 8px;
+  letter-spacing: 1px;
+}
+
+.rival-rank-badge.rank-s {
+  background: linear-gradient(135deg, #ffd23f, #f59e0b);
+  color: #1a0f00;
+  box-shadow: 0 0 10px rgba(255, 210, 63, 0.8);
+}
+.rival-rank-badge.rank-a {
+  background: linear-gradient(135deg, #ff334b, #d90429);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(255, 51, 75, 0.6);
+}
+.rival-rank-badge.rank-b {
+  background: linear-gradient(135deg, #00d2ff, #0284c7);
+  color: #fff;
+}
+.rival-rank-badge.rank-c {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff;
+}
+.rival-rank-badge.rank-d {
+  background: #64748b;
+  color: #fff;
+}
+
+.rival-info-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rival-name-group {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.rival-name {
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 0.5px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.rival-sub {
+  font-size: 0.8rem;
+  font-weight: bold;
+  color: var(--gold);
+}
+
+.rival-stats-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.75rem;
+  color: #cbd5e1;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.rival-stat-item strong {
+  color: #38bdf8;
+  font-weight: 800;
+}
+
+.rival-control-tag {
+  color: #facc15 !important;
+  background: rgba(250, 204, 21, 0.15);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(250, 204, 21, 0.4);
+}
+
+/* 投球時の球種ポップアップテロップ */
+.batting-pitch-callout {
+  position: absolute;
+  top: 130px; left: 50%;
+  transform: translateX(-50%) scale(0.6);
+  z-index: 28;
+  background: linear-gradient(90deg, rgba(220, 38, 38, 0.95), rgba(185, 28, 28, 0.95));
+  border: 2px solid var(--gold);
+  border-radius: 20px;
+  padding: 5px 20px;
+  box-shadow: 0 0 25px rgba(255, 51, 75, 0.7);
+  pointer-events: none;
+  opacity: 0;
+  transition: all 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  white-space: nowrap;
+}
+
+.batting-pitch-callout.show {
+  opacity: 1;
+  transform: translateX(-50%) scale(1.05);
+}
+
+.pitch-type-text {
+  font-size: 1.1rem;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 1px;
+  text-shadow: 0 0 8px rgba(255, 210, 63, 0.8);
+}
+
+/* 飛距離メーターHUD */
+.batting-meter-hud {
+  position: absolute;
+  top: 66px; left: 50%;
+  transform: translateX(-50%);
+  z-index: 36;
+  background: rgba(6, 12, 24, 0.88);
+  border: 2px solid var(--gold);
+  border-radius: 30px;
+  padding: 5px 22px;
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: var(--gold);
+  display: none;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 0 25px rgba(255, 210, 63, 0.6);
+  backdrop-filter: blur(6px);
+}
+
+.batting-meter-hud.show {
+  display: flex;
+}
+
+.meter-val {
+  font-family: var(--font-digital);
+  font-size: 1.6rem;
+  color: #ffffff;
+  text-shadow: 0 0 10px var(--gold);
+}
+
+/* 🎙️ プロ野球実況テロップ */
+.batting-broadcast-ticker {
+  position: absolute;
+  bottom: 22px; left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  z-index: 38;
+  background: linear-gradient(90deg, rgba(185, 28, 28, 0.95), rgba(220, 38, 38, 0.95));
+  border: 2px solid var(--gold);
+  border-radius: 10px;
+  padding: 8px 22px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.85);
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.28s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  max-width: 90%;
+  white-space: nowrap;
+}
+
+.batting-broadcast-ticker.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.ticker-badge {
+  background: var(--gold);
+  color: #000;
+  font-weight: 900;
+  font-size: 0.8rem;
+  padding: 3px 8px;
+  border-radius: 5px;
+  letter-spacing: 1px;
+}
+
+.ticker-text {
+  color: #ffffff;
+  font-weight: 900;
+  font-size: 1.15rem;
+  letter-spacing: 0.5px;
+  text-shadow: 0 2px 5px rgba(0, 0, 0, 0.85);
+}
+
+/* ホームランポップアップ */
+.batting-homerun-popup {
+  position: absolute;
+  top: 42%; left: 50%;
+  transform: translate(-50%, -50%) scale(0.5);
+  opacity: 0;
+  z-index: 40;
+  pointer-events: none;
+  transition: all 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  text-align: center;
+}
+
+.batting-homerun-popup.show {
+  transform: translate(-50%, -50%) scale(1);
+  opacity: 1;
+}
+
+.hr-big-title {
+  font-size: 3.4rem;
+  font-weight: 900;
+  color: var(--gold);
+  text-shadow: 0 0 30px #ff334b, 0 0 60px #ffd23f;
+  letter-spacing: 3px;
+}
+
+.hr-dist {
+  font-size: 1.8rem;
+  font-weight: bold;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.85);
+  padding: 6px 24px;
+  border-radius: 10px;
+  display: inline-block;
+  margin-top: 8px;
+  border: 2.5px solid var(--gold);
+  box-shadow: 0 0 25px rgba(255, 210, 63, 0.7);
+}
+
+/* タブレット向け特大スイングボタン */
+.btn-batting-touch {
+  position: absolute;
+  bottom: 24px; right: 24px;
+  width: 95px; height: 95px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ffd23f, #d97706);
+  border: 4px solid #ffffff;
+  color: #1a0f00;
+  font-size: 1.25rem;
+  font-weight: 900;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 25px rgba(255, 210, 63, 0.6);
+  cursor: pointer;
+  z-index: 30;
+  transition: transform 0.1s;
+  outline: none;
+}
+
+.btn-batting-touch:active {
+  transform: scale(0.92);
+  box-shadow: 0 0 15px rgba(255, 210, 63, 0.9);
+}
+
+.touch-sub { font-size: 0.65rem; font-weight: bold; }
+
+.batting-guide-tip {
+  position: absolute;
+  bottom: 12px; left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  padding: 4px 16px;
+  font-size: 0.76rem;
+  color: #cbd5e1;
+  z-index: 20;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* リザルト画面・新スタッツ */
+.res-dist-item {
+  color: var(--gold);
+}
+
+/* ========================================================
+   対戦相手ルーレット（スロットリール抽選）モーダル
+   ======================================================== */
+.batting-roulette-modal {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: radial-gradient(circle at center, rgba(8, 16, 36, 0.92) 0%, rgba(3, 6, 15, 0.96) 100%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+  user-select: none;
+}
+
+.batting-roulette-modal.hide {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.roulette-container {
+  background: linear-gradient(180deg, #101c38 0%, #080f20 100%);
+  border: 2.5px solid #00d2ff;
+  border-radius: 20px;
+  box-shadow: 0 0 35px rgba(0, 210, 255, 0.4), 0 20px 50px rgba(0, 0, 0, 0.9);
+  padding: 16px 20px 20px;
+  width: 92%;
+  max-width: 480px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.roulette-header {
+  margin-bottom: 12px;
+}
+
+.roulette-title-badge {
+  display: inline-block;
+  background: linear-gradient(90deg, #f59e0b, #ffd23f);
+  color: #1a0f00;
+  font-weight: 900;
+  font-size: 0.8rem;
+  padding: 3px 16px;
+  border-radius: 20px;
+  letter-spacing: 1px;
+  box-shadow: 0 0 12px rgba(255, 210, 63, 0.6);
+}
+
+.roulette-title {
+  font-size: 1.35rem;
+  font-weight: 900;
+  color: #ffffff;
+  margin: 6px 0 0;
+  text-shadow: 0 0 12px rgba(0, 210, 255, 0.8);
+  letter-spacing: 0.5px;
+}
+
+/* スロット窓とターゲット枠 */
+.roulette-window-wrapper {
+  position: relative;
+  width: 100%;
+  height: 216px; /* 72px * 3枚分 */
+  background: #040813;
+  border-radius: 14px;
+  border: 2px solid rgba(0, 210, 255, 0.35);
+  overflow: hidden;
+  box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.95);
+  margin: 0 auto;
+}
+
+/* ドラム型の上下グラデーションシャドウ */
+.roulette-window-wrapper::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 60px;
+  background: linear-gradient(to bottom, rgba(4, 8, 19, 0.95), transparent);
+  z-index: 5;
+  pointer-events: none;
+}
+
+.roulette-window-wrapper::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 60px;
+  background: linear-gradient(to top, rgba(4, 8, 19, 0.95), transparent);
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* 中央ターゲットフレーム（当選枠） */
+.roulette-target-frame {
+  position: absolute;
+  top: 72px; left: 0;
+  width: 100%; height: 72px;
+  border-top: 2.5px solid #ffd23f;
+  border-bottom: 2.5px solid #ffd23f;
+  background: rgba(255, 210, 63, 0.12);
+  box-shadow: 0 0 20px rgba(255, 210, 63, 0.4), inset 0 0 15px rgba(255, 210, 63, 0.15);
+  z-index: 6;
+  pointer-events: none;
+}
+
+/* ターゲットポインター矢印 */
+.roulette-pointer {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  font-size: 1.6rem;
+  color: #ffd23f;
+  text-shadow: 0 0 12px #ffd23f;
+  pointer-events: none;
+}
+
+.roulette-pointer.left {
+  left: 8px;
+  animation: pointerPulseLeft 0.5s infinite alternate ease-in-out;
+}
+
+.roulette-pointer.right {
+  right: 8px;
+  animation: pointerPulseRight 0.5s infinite alternate ease-in-out;
+}
+
+@keyframes pointerPulseLeft {
+  from { transform: translateY(-50%) translateX(0); }
+  to { transform: translateY(-50%) translateX(4px); }
+}
+
+@keyframes pointerPulseRight {
+  from { transform: translateY(-50%) translateX(0); }
+  to { transform: translateY(-50%) translateX(-4px); }
+}
+
+/* リール窓とリール帯 */
+.roulette-reel-window {
+  width: 100%;
+  height: 216px;
+  overflow: hidden;
+  position: relative;
+}
+
+.roulette-reel-strip {
+  display: flex;
+  flex-direction: column;
+  will-change: transform;
+}
+
+/* 1枚ごとのライバル選手カード */
+.roulette-card-item {
+  height: 72px;
+  min-height: 72px;
+  max-height: 72px;
+  box-sizing: border-box;
+  padding: 8px 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  transition: background 0.15s ease;
+}
+
+.roulette-card-item.winner-highlight {
+  background: rgba(255, 210, 63, 0.28) !important;
+}
+
+.roulette-card-center {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-left: 12px;
+  flex: 1;
+  overflow: hidden;
+  text-align: left;
+}
+
+.roulette-card-name {
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: #ffffff;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  max-width: 180px;
+  letter-spacing: 0.5px;
+}
+
+.roulette-card-sub {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  font-weight: bold;
+}
+
+.roulette-card-speed {
+  font-size: 0.95rem;
+  font-weight: 900;
+  color: #38bdf8;
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+  white-space: nowrap;
+}
+
+/* 手動STOPボタン操作エリア */
+.roulette-action-area {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-roulette-stop {
+  background: linear-gradient(180deg, #ff334b 0%, #cc0020 100%);
+  color: #ffffff;
+  font-size: 1.35rem;
+  font-weight: 900;
+  letter-spacing: 1px;
+  padding: 10px 48px;
+  border-radius: 40px;
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 25px rgba(255, 51, 75, 0.7), 0 5px 0 #800014;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: transform 0.08s ease, box-shadow 0.08s ease, opacity 0.2s ease;
+  user-select: none;
+  outline: none;
+}
+
+.btn-roulette-stop:hover {
+  box-shadow: 0 0 35px rgba(255, 51, 75, 0.9), 0 5px 0 #800014;
+}
+
+.btn-roulette-stop:active {
+  transform: translateY(4px);
+  box-shadow: 0 0 15px rgba(255, 51, 75, 0.9), 0 1px 0 #800014;
+}
+
+.btn-roulette-stop:disabled {
+  opacity: 0.55;
+  pointer-events: none;
+  transform: none;
+}
+
+.stop-icon {
+  font-size: 1.25rem;
+}
+
+.roulette-tip {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  font-weight: bold;
+}
+
+/* ========================================================
+   決定インパクトカード（DECIDED! ズームアップ）
+   ======================================================== */
+.roulette-decided-card {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%) scale(0.6);
+  z-index: 60;
+  width: 90%;
+  max-width: 440px;
+  background: linear-gradient(135deg, #091328 0%, #0c1c3a 100%);
+  border: 3.5px solid #ffd23f;
+  border-radius: 20px;
+  padding: 20px 24px;
+  text-align: center;
+  box-shadow: 0 0 60px rgba(255, 210, 63, 0.85), 0 25px 60px rgba(0, 0, 0, 0.98);
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.32s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.roulette-decided-card.show {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, -50%) scale(1.04);
+}
+
+.decided-badge {
+  font-size: 1.2rem;
+  font-weight: 900;
+  color: #ffd23f;
+  letter-spacing: 2px;
+  text-shadow: 0 0 15px #ffd23f;
+  margin-bottom: 12px;
+}
+
+.decided-pitcher-box {
+  background: rgba(0, 0, 0, 0.6);
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border-radius: 14px;
+  padding: 12px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.decided-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding-bottom: 4px;
+}
+
+.decided-tag {
+  font-size: 0.8rem;
+  font-weight: 900;
+  color: #ff334b;
+  letter-spacing: 1px;
+}
+
+.decided-name-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  margin: 4px 0;
+}
+
+.decided-name {
+  font-size: 1.45rem;
+  font-weight: 900;
+  color: #ffffff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+}
+
+.decided-sub {
+  font-size: 0.85rem;
+  color: #ffd23f;
+  font-weight: bold;
+}
+
+.decided-stats-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  color: #cbd5e1;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 5px 12px;
+  border-radius: 6px;
+}
+
+.decided-stats-row span {
+  white-space: nowrap;
+}
+
+.decided-stats-row strong {
+  color: #38bdf8;
+  font-weight: 900;
+}
+
+.decided-playball-text {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: #ff334b;
+  letter-spacing: 2px;
+  text-shadow: 0 0 20px rgba(255, 51, 75, 0.9);
+  margin-top: 14px;
+  animation: playBallPulse 0.4s infinite alternate ease-in-out;
+}
+
+@keyframes playBallPulse {
+  from { transform: scale(1.0); }
+  to { transform: scale(1.08); }
+}
+

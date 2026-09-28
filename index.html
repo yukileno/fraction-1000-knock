@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>熱血！分数1000本ノック 〜猛特訓編〜</title>
-  <link rel="stylesheet" href="css/style.css?v=20260928_4">
+  <link rel="stylesheet" href="css/style.css?v=20260928_8">
+  <link rel="stylesheet" href="css/batting.css?v=20260928_8">
 </head>
 <body class="theme-nekketsu">
 
@@ -231,6 +232,136 @@
       </section>
     </main>
   </div> <!-- /.app-viewport -->
+
+  <!-- ==================== ご褒美バッティング（5問に1回・1球入魂）画面 ==================== -->
+  <section id="screen-batting" class="screen hide">
+    <!-- 背景カメラレイヤー 1: 打席視点（投手対決） -->
+    <div id="batting-layer-batter" class="batting-layer active">
+      <img src="img/pitcher_duel.jpg" alt="スタジアム対決" class="batting-bg-img">
+      <div class="batting-overlay"></div>
+    </div>
+
+    <!-- 背景カメラレイヤー 2: 実況中継カメラ視点（外野パノラマ・打球追尾） -->
+    <div id="batting-layer-broadcast" class="batting-layer">
+      <img id="batting-img-broadcast" src="img/stadium_outfield_cam.jpg" alt="外野中継カメラ" class="batting-bg-img broadcast-cam">
+      <div class="batting-overlay"></div>
+    </div>
+
+    <!-- インパクト時の閃光フラッシュ -->
+    <div id="batting-impact-flash"></div>
+
+    <!-- バッティング描画Canvas -->
+    <canvas id="batting-canvas"></canvas>
+
+    <!-- 上部ご褒美バー -->
+    <div class="batting-header-bar">
+      <span class="batting-reward-badge">🌟 5問達成ご褒美！</span>
+      <span class="batting-sub-msg" id="batting-status-text">絶好球が来るぞ！【1球入魂】スイング！</span>
+      <span class="batting-power-badge" id="batting-player-stats-badge">ミート: E 40 / パワー: E 40</span>
+    </div>
+
+    <!-- 対決ライバル投手HUD（ランキング上位・実力派投手） -->
+    <div id="batting-rival-card" class="batting-rival-card">
+      <div class="rival-header-row">
+        <span class="rival-tag">🔥 VS 相手投手</span>
+        <span id="batting-rival-rank-badge" class="rival-rank-badge rank-s">S</span>
+      </div>
+      <div class="rival-info-main">
+        <div class="rival-name-group">
+          <span id="batting-rival-name" class="rival-name">わたなべ 投手</span>
+          <span id="batting-rival-sub" class="rival-sub">名簿上位 / 剛腕エース</span>
+        </div>
+      </div>
+      <div class="rival-stats-bar">
+        <span class="rival-stat-item">MAX: <strong id="batting-rival-speed">156 km/h</strong></span>
+        <span class="rival-stat-item">球種: <strong id="batting-rival-pitches">ストレート・フォーク</strong></span>
+        <span class="rival-stat-item">制球: <strong id="batting-rival-control" class="rival-control-tag">4隅を突く</strong></span>
+      </div>
+    </div>
+
+    <!-- 投球時の球種ポップアップテロップ -->
+    <div id="batting-pitch-callout" class="batting-pitch-callout">
+      <span id="batting-pitch-callout-type" class="pitch-type-text">⚡ 156km/h 剛速球！</span>
+    </div>
+
+    <!-- 飛距離リアルタイムメーターHUD -->
+    <div id="batting-meter-hud" class="batting-meter-hud">
+      <span>🚀 飛距離:</span>
+      <span id="batting-meter-val" class="meter-val">0m</span>
+    </div>
+
+    <!-- 実況テロップ -->
+    <div id="batting-broadcast-ticker" class="batting-broadcast-ticker">
+      <div class="ticker-badge">🎙️ 実況</div>
+      <div id="batting-ticker-text" class="ticker-text">打ったぁぁぁー！大きい！レフトへ！</div>
+    </div>
+
+    <!-- ホームランポップアップ -->
+    <div id="batting-homerun-popup" class="batting-homerun-popup">
+      <div class="hr-big-title">特大ホームラン！！</div>
+      <div class="hr-dist" id="batting-hr-dist-text">推定飛距離 145m！</div>
+    </div>
+
+    <!-- 対戦相手ルーレット（スロット抽選）モーダル -->
+    <div id="batting-roulette-modal" class="batting-roulette-modal hide">
+      <div class="roulette-container">
+        <div class="roulette-header">
+          <span class="roulette-title-badge">🎰 MATCHUP ROULETTE 🎰</span>
+          <h2 class="roulette-title">対戦相手を抽選中！</h2>
+        </div>
+
+        <div class="roulette-window-wrapper">
+          <div class="roulette-pointer left">▶</div>
+          <div class="roulette-pointer right">◀</div>
+          <div class="roulette-target-frame"></div>
+          <div id="roulette-reel-window" class="roulette-reel-window">
+            <div id="roulette-reel-strip" class="roulette-reel-strip">
+              <!-- 動的に生成されるライバル投手カード一覧 -->
+            </div>
+          </div>
+        </div>
+
+        <!-- 手動STOPボタン（子どもたちがタップして止められる） -->
+        <div class="roulette-action-area">
+          <button id="btn-roulette-stop" class="btn-roulette-stop" type="button">
+            <span class="stop-icon">🛑</span> STOP!!
+          </button>
+          <div class="roulette-tip">※ タップでSTOP！ または自動で止まります</div>
+        </div>
+      </div>
+
+      <!-- 決定時のインパクトカード（ズームアップ＆フラッシュ） -->
+      <div id="roulette-decided-card" class="roulette-decided-card hide">
+        <div class="decided-badge">🔥 対戦相手決定！ 🔥</div>
+        <div class="decided-pitcher-box">
+          <div class="decided-header-row">
+            <span class="decided-tag">相手投手</span>
+            <span id="roulette-decided-rank" class="rival-rank-badge rank-s">S</span>
+          </div>
+          <div class="decided-name-row">
+            <div id="roulette-decided-name" class="decided-name">ライバル投手</div>
+            <div id="roulette-decided-sub" class="decided-sub">本格派エース</div>
+          </div>
+          <div class="decided-stats-row">
+            <span>MAX: <strong id="roulette-decided-speed">164 km/h</strong></span>
+            <span>球種: <strong id="roulette-decided-pitches">火の玉ストレート・フォーク</strong></span>
+          </div>
+        </div>
+        <div class="decided-playball-text">PLAY BALL !!</div>
+      </div>
+    </div>
+
+    <!-- タブレット・スマホ用特大スイングボタン -->
+    <button id="btn-batting-swing-touch" class="btn-batting-touch" tabindex="-1">
+      <span>打つ！</span>
+      <span class="touch-sub">SWING</span>
+    </button>
+
+    <!-- ガイド案内 -->
+    <div class="batting-guide-tip">
+      💻 PC: <strong>マウスで狙って [スペース] か [クリック]</strong> | 📱 タブレット: <strong>ドラッグで狙って [打つ！]</strong>
+    </div>
+  </section>
 
   <!-- 入部届（クラス・背番号選択）モーダル -->
   <div class="modal-overlay auth-modal-overlay" id="authModal">
@@ -492,11 +623,12 @@
   <audio id="audioHomerun" src="sound/homerun.mp3" preload="auto"></audio>
 
   <!-- スクリプト読み込み（キャッシュ無効化バージョン更新） -->
-  <script src="js/assets.js?v=20260928_7"></script>
-  <script src="js/fraction.js?v=20260928_7"></script>
-  <script src="js/tracker.js?v=20260928_7"></script>
-  <script src="js/auth.js?v=20260928_7"></script>
-  <script src="js/sync.js?v=20260928_7"></script>
-  <script src="js/app.js?v=20260928_7"></script>
+  <script src="js/assets.js?v=20260928_8"></script>
+  <script src="js/fraction.js?v=20260928_8"></script>
+  <script src="js/tracker.js?v=20260928_8"></script>
+  <script src="js/auth.js?v=20260928_8"></script>
+  <script src="js/sync.js?v=20260928_8"></script>
+  <script src="js/batting.js?v=20260928_8"></script>
+  <script src="js/app.js?v=20260928_8"></script>
 </body>
 </html>
