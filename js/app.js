@@ -1036,13 +1036,19 @@
       boxes.forEach(box => {
         box.addEventListener('focus', () => this.setActiveInput(box));
         box.addEventListener('click', () => this.setActiveInput(box));
+        // 全角数字が入力された場合の自動半角変換＆数字のみフィルタ
+        box.addEventListener('input', () => {
+          const raw = box.value;
+          const cleaned = raw.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).replace(/[^0-9]/g, '');
+          const maxLen = Number(box.getAttribute('maxlength')) || 3;
+          if (box.value !== cleaned.slice(0, maxLen)) {
+            box.value = cleaned.slice(0, maxLen);
+          }
+        });
       });
 
       this.inputWhole.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          this.checkAnswerNow();
-        } else if (e.key === 'ArrowRight' || (e.key === 'Tab' && !e.shiftKey)) {
+        if (e.key === 'ArrowRight' || (e.key === 'Tab' && !e.shiftKey)) {
           if (e.key === 'ArrowRight') {
             e.preventDefault();
             this.setActiveInput(this.inputNum);
@@ -1051,10 +1057,7 @@
       });
 
       this.inputNum.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          this.checkAnswerNow();
-        } else if (e.key === 'ArrowDown') {
+        if (e.key === 'ArrowDown') {
           e.preventDefault();
           this.setActiveInput(this.inputDen);
         } else if (e.key === 'ArrowLeft') {
@@ -1064,10 +1067,7 @@
       });
 
       this.inputDen.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          this.checkAnswerNow();
-        } else if (e.key === 'ArrowUp') {
+        if (e.key === 'ArrowUp') {
           e.preventDefault();
           this.setActiveInput(this.inputNum);
         } else if (e.key === 'ArrowLeft') {
@@ -1104,7 +1104,7 @@
         this.btnNumpadNextSlot.addEventListener('click', () => this.nextInputSlot());
       }
 
-      // グローバル物理キーボード操作（inputmode="none"でもPC等から入力可能に）
+      // ⌨️ グローバル物理キーボード操作（Chromebook・PC完全対応＆二重入力完全防止）
       window.addEventListener('keydown', (e) => {
         // モーダル表示中は無効
         if (this.authModal && this.authModal.classList.contains('active')) return;
@@ -1114,13 +1114,48 @@
         if (this.rankingModal && this.rankingModal.classList.contains('active')) return;
         if (this.rankingCooldownModal && this.rankingCooldownModal.classList.contains('active')) return;
 
+        // ニックネーム入力欄などにフォーカスがある場合はスキップ
+        if (document.activeElement && document.activeElement === this.inputNickname) {
+          return;
+        }
+
+        // 数字キー判定（半角・全角・キーコード全対応）
+        let digit = null;
         if (/^[0-9]$/.test(e.key)) {
-          this.inputNumpadDigit(e.key);
-        } else if (e.key === 'Backspace') {
+          digit = e.key;
+        } else if (/^[０-９]$/.test(e.key)) {
+          digit = String.fromCharCode(e.key.charCodeAt(0) - 0xFEE0);
+        } else if (e.code && /^Digit([0-9])$/.test(e.code)) {
+          digit = e.code.match(/^Digit([0-9])$/)[1];
+        } else if (e.code && /^Numpad([0-9])$/.test(e.code)) {
+          digit = e.code.match(/^Numpad([0-9])$/)[1];
+        }
+
+        if (digit !== null) {
+          // 💥【超重要・Chromebook二重入力防止】
+          // ブラウザのデフォルト入力（box.valueへの直接追加）をキャンセルし、自前のinputNumpadDigitのみで入力！
+          e.preventDefault();
+          this.inputNumpadDigit(digit);
+          return;
+        }
+
+        if (e.key === 'Backspace' || e.code === 'Backspace' || e.key === 'Delete' || e.code === 'Delete') {
+          // 💥 Backspaceの二重消去を防止
+          e.preventDefault();
           this.numpadBackspace();
-        } else if (e.key === 'Tab') {
+          return;
+        }
+
+        if (e.key === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter') {
+          e.preventDefault();
+          this.checkAnswerNow();
+          return;
+        }
+
+        if (e.key === 'Tab') {
           e.preventDefault();
           this.nextInputSlot();
+          return;
         }
       });
 
