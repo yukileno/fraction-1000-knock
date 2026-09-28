@@ -498,9 +498,9 @@
     }
 
     initCoachImage() {
-      const bgUrl = (window.ASSETS && window.ASSETS.KYOJIN_IMG)
-        ? `url("${window.ASSETS.KYOJIN_IMG}")`
-        : 'url("kyojin.jpg")';
+      const bgUrl = (window.ASSETS && window.ASSETS.BG_IMG)
+        ? `url("${window.ASSETS.BG_IMG}")`
+        : 'url("bg.jpg")';
       document.body.style.backgroundImage = bgUrl;
       if (this.appViewport) {
         this.appViewport.style.backgroundImage = 'none';

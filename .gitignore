@@ -3,6 +3,7 @@
 !img/*.png
 *.jpg
 !kyojin.jpg
+!bg.jpg
 !img/*.jpg
 *.jpeg
 *.gif
