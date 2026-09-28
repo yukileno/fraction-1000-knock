@@ -503,81 +503,81 @@
     }
 
     // --- ライバル投手の生成とプール ---
-    buildPitcherProfile(raw, rankPos = 1) {
+    buildPitcherProfile(raw = {}, rankPos = 0) {
       const name = (raw && (raw.nickname || raw.name)) ? (raw.nickname || raw.name) : "ライバル投手";
-      const solved = Number(raw ? (raw.totalSolved || raw.score || 0) : 0);
-      const hr = Number(raw ? (raw.homeruns || 0) : 0);
-      const maxDist = Number(raw ? (raw.maxDistance || 0) : 0);
-
-      const powerPts = solved * 1.0 + hr * 2.2 + (maxDist > 100 ? (maxDist - 100) * 0.7 : 0);
+      const solved = Number(raw ? (raw.totalSolved !== undefined ? raw.totalSolved : (raw.score || 0)) : 0);
+      const className = (raw && raw.className) ? raw.className : '';
+      const studentNumber = (raw && raw.studentNumber) ? raw.studentNumber : 0;
 
       let grade = 'D';
-      let maxSpeedKmh = 120;
+      let maxSpeedKmh = 118;
       let pitches = ['STRAIGHT'];
       let pitchLabels = ['直球'];
       let control = 'CENTER';
-      let controlLabel = '中央集球';
-      let title = (raw && raw.title) ? raw.title : '期待の右腕';
+      let controlLabel = 'ど真ん中勝負';
+      let title = '全力投球ルーキー';
 
-      if (rankPos === 1) {
+      // 🌟 問題正解数（進み具合）に応じた能力査定
+      if (solved >= 80) {
+        // 【Sランク】80問以上突破の学年怪物エース！
         grade = 'S';
-        maxSpeedKmh = 163 + Math.floor(Math.random() * 5);
+        maxSpeedKmh = 160 + Math.floor(Math.random() * 6); // 160〜165km/h（火の玉で最大170km/h超！）
         pitches = ['FIREBALL', 'SLIDER', 'FORK'];
-        pitchLabels = ['火の玉ストレート', '超鋭角スライダー', '消える魔球フォーク'];
-        control = 'PINPOINT';
-        controlLabel = '針の穴を通す制球';
-        title = '全国1位・絶対的伝説の守護神';
-      } else if (rankPos <= 3 || powerPts >= 160 || hr >= 50 || solved >= 75) {
-        grade = 'S';
-        maxSpeedKmh = 158 + Math.floor(Math.random() * 5);
-        pitches = ['FIREBALL', 'SLIDER', 'FORK', 'STRAIGHT'];
-        pitchLabels = ['火の玉', '鋭角スライダー', '消えるフォーク'];
+        pitchLabels = ['火の玉ストレート', '鋭角スライダー', '消える魔球フォーク'];
         control = 'PINPOINT';
         controlLabel = '4隅ピンポイント';
-        title = '全国トップクラスの豪腕エース';
-      } else if (powerPts >= 90 || hr >= 30 || solved >= 45 || rankPos <= 6) {
+        title = '絶対的伝説の豪腕守護神';
+      } else if (solved >= 40) {
+        // 【Aランク】40〜79問の看板剛腕エース！
         grade = 'A';
-        maxSpeedKmh = 148 + Math.floor(Math.random() * 6);
+        maxSpeedKmh = 148 + Math.floor(Math.random() * 6); // 148〜153km/h
         pitches = ['STRAIGHT', 'SLIDER', 'FORK'];
         pitchLabels = ['剛速球', '鋭角スライダー', '落差フォーク'];
         control = 'CORNER';
         controlLabel = 'きわどいコーナー攻め';
-        title = '強豪校の看板エース';
-      } else if (powerPts >= 45 || hr >= 18 || solved >= 25 || rankPos <= 12) {
+        title = '本格派剛腕ピッチャー';
+      } else if (solved >= 20) {
+        // 【Bランク】20〜39問の技巧派好投手！
         grade = 'B';
-        maxSpeedKmh = 138 + Math.floor(Math.random() * 6);
+        maxSpeedKmh = 136 + Math.floor(Math.random() * 6); // 136〜141km/h
         pitches = ['STRAIGHT', 'SLIDER', 'CURVE'];
         pitchLabels = ['直球', 'スライダー', 'ドロップカーブ'];
         control = 'CORNER';
         controlLabel = '外角コーナー狙い';
-        title = '変幻自在の技巧派右腕';
-      } else if (powerPts >= 20 || hr >= 8 || solved >= 12) {
+        title = '変幻自在の技巧派';
+      } else if (solved >= 10) {
+        // 【Cランク】10〜19問の基本好投手！
         grade = 'C';
-        maxSpeedKmh = 126 + Math.floor(Math.random() * 8);
+        maxSpeedKmh = 125 + Math.floor(Math.random() * 6); // 125〜130km/h
         pitches = ['STRAIGHT', 'CURVE'];
         pitchLabels = ['直球', 'スローカーブ'];
         control = 'CENTER';
         controlLabel = 'ストライク先行';
         title = '緩急を操る好投手';
       } else {
+        // 【Dランク】0〜9問の解き始めルーキー（打ちやすい絶好球！）
         grade = 'D';
-        maxSpeedKmh = 115 + Math.floor(Math.random() * 8);
+        maxSpeedKmh = 112 + Math.floor(Math.random() * 7); // 112〜118km/h
         pitches = ['STRAIGHT'];
         pitchLabels = ['打ちやすい直球'];
         control = 'CENTER';
         controlLabel = 'ど真ん中勝負';
-        title = '期待のルーキー投手';
+        title = '全力投球ルーキー';
       }
 
-      const subTitle = rankPos > 0
-        ? `名簿${rankPos}位 / ${solved > 0 ? solved + '問正解' : title}`
-        : title;
+      // サブタイトル（肩書き表示）：クラス名や正解数を明記
+      let subTitle = '';
+      if (className && studentNumber) {
+        subTitle = `${className} ${studentNumber}番 / ${solved}問正解`;
+      } else if (solved > 0) {
+        subTitle = `通算 ${solved}問正解 / ${title}`;
+      } else {
+        subTitle = (raw && raw.title) ? raw.title : title;
+      }
 
       return {
         name,
         solved,
-        homeruns: hr,
-        maxDistance: maxDist,
         grade,
         maxSpeedKmh,
         pitches,
@@ -585,6 +585,8 @@
         control,
         controlLabel,
         subTitle,
+        className,
+        studentNumber,
         rankPos
       };
     }
@@ -598,29 +600,35 @@
         users = [];
       }
 
-      let rank = 1;
-      // 名簿児童（解いた問題数の多い順）
-      const sortedUsers = [...users].sort((a, b) => (Number(b.totalSolved) || 0) - (Number(a.totalSolved) || 0));
-
-      for (const u of sortedUsers) {
+      // 自分自身（ログイン中の児童）を除外
+      const eligibleUsers = users.filter(u => {
         const name = (u.nickname || (u.className ? `${u.className} ${u.studentNumber}番` : '')).trim();
-        if (!name || uniqueMap.has(name)) continue;
-        if (excludeNickname && name === excludeNickname) continue; // 自分自身は相手投手から除外
-        const profile = this.buildPitcherProfile({
-          name: name,
-          totalSolved: u.totalSolved || 0
-        }, rank);
-        uniqueMap.set(name, profile);
-        rank++;
-        if (uniqueMap.size >= 15) break;
+        return name && name !== excludeNickname;
+      });
+
+      // 🌟 名簿児童（自動名簿シートのメンバー）がいれば、その全員をプールに登録！
+      if (eligibleUsers.length > 0) {
+        eligibleUsers.forEach(u => {
+          const name = (u.nickname || (u.className ? `${u.className} ${u.studentNumber}番` : '')).trim();
+          if (!name || uniqueMap.has(name)) return;
+          const profile = this.buildPitcherProfile({
+            name: name,
+            nickname: u.nickname,
+            className: u.className,
+            studentNumber: u.studentNumber,
+            totalSolved: Number(u.totalSolved) || 0
+          });
+          uniqueMap.set(name, profile);
+        });
       }
 
-      // デフォルトのライバル投手で補完（名簿が少ない時・オフライン時）
-      for (const d of DEFAULT_RIVAL_PITCHERS) {
-        if (!uniqueMap.has(d.name)) {
-          const profile = this.buildPitcherProfile(d, rank);
-          uniqueMap.set(d.name, profile);
-          rank++;
+      // 名簿が0人（初期オフライン時など）の場合のみ、デフォルトのキャラクター投手で補完
+      if (uniqueMap.size === 0) {
+        for (const d of DEFAULT_RIVAL_PITCHERS) {
+          if (!uniqueMap.has(d.name)) {
+            const profile = this.buildPitcherProfile(d);
+            uniqueMap.set(d.name, profile);
+          }
         }
       }
 
