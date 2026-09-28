@@ -2166,4 +2166,39 @@ canvas#scratchCanvas {
   color: #64748b;
 }
 
+/* ==========================================================================
+   ⚡ 教師用（出席番号45番）強制正解ボタン
+   ========================================================================== */
+.btn-teacher-solve {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 11px 16px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 900;
+  color: #ffffff;
+  background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+  border: 2px solid #c084fc;
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.4), 0 2px 0 #312e81;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  letter-spacing: 1px;
+  text-align: center;
+  user-select: none;
+}
+.btn-teacher-solve:hover {
+  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(124, 58, 237, 0.6), 0 4px 0 #312e81;
+}
+.btn-teacher-solve:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.4);
+}
+.btn-teacher-solve.hide {
+  display: none !important;
+}
+
 

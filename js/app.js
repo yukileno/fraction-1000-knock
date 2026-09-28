@@ -440,6 +440,7 @@
 
       // ボタン
       this.btnCheck = document.getElementById('btnCheck');
+      this.btnTeacherSolve = document.getElementById('btnTeacherSolve');
       this.feedbackBox = document.getElementById('feedbackBox');
 
       // 鬼監督
@@ -536,7 +537,7 @@
       for (let i = 1; i <= 45; i++) {
         const opt = document.createElement('option');
         opt.value = i;
-        opt.textContent = `背番号 ${i} 番`;
+        opt.textContent = (i === 45) ? `背番号 ${i} 番（教師用）` : `背番号 ${i} 番`;
         this.authNumber.appendChild(opt);
       }
     }
@@ -570,6 +571,7 @@
     }
 
     showAuthModal() {
+      if (this.btnTeacherSolve) this.btnTeacherSolve.classList.add('hide');
       this.authModal.classList.add('active');
       this.authStepSelect.style.display = 'block';
       this.authStepConfirm.style.display = 'none';
@@ -582,9 +584,23 @@
 
     onLoginComplete(user, isNew = false) {
       this.hideAuthModal();
+      if (user && this.auth) {
+        this.auth.currentUser = user;
+      }
       this.studentDisplayName.textContent = `⚾ 背番号${user.studentNumber}番 ${user.nickname} 選手`;
       this.sessionSolvedCount = 0;
       this.lastBattingTriggerSolved = -1;
+
+      // ⚡ 出席番号45番（教師用アカウント）のときのみ強制正解ボタンを表示
+      const isTeacher = user && Number(user.studentNumber) === 45;
+      if (this.btnTeacherSolve) {
+        if (isTeacher) {
+          this.btnTeacherSolve.classList.remove('hide');
+        } else {
+          this.btnTeacherSolve.classList.add('hide');
+        }
+      }
+
       this.tracker.setCurrentUser(user);
       this.showdown.setBatterName(user.nickname);
       this.updateGrowthDashboard();
@@ -772,6 +788,30 @@
     numpadClear() {
       if (!this.activeInputBox) return;
       this.activeInputBox.value = '';
+    }
+
+    // ⚡ 教師用（出席番号45番）：現在の問題の正解を自動入力して強制正解を実行
+    forceTeacherSolve() {
+      const user = this.auth ? this.auth.getCurrentUser() : null;
+      const studentNum = user ? Number(user.studentNumber) : Number(this.selectedNumber);
+      const isTeacher = studentNum === 45;
+      if (!isTeacher) return;
+      if (!this.currentProblem || !this.currentProblem.answer) return;
+
+      const ans = this.currentProblem.answer;
+
+      if (ans.isInteger) {
+        this.inputWhole.value = String(ans.whole || 0);
+        this.inputNum.value = '';
+        this.inputDen.value = '';
+      } else {
+        this.inputWhole.value = (ans.whole && ans.whole > 0) ? String(ans.whole) : '';
+        this.inputNum.value = String(ans.num || 0);
+        this.inputDen.value = String(ans.den || 1);
+      }
+
+      this.setCoachSpeech('「【教師用デバッグ】強制正解を発動したぞ！！」');
+      this.checkAnswerNow();
     }
 
     checkAnswerNow() {
@@ -1210,6 +1250,14 @@
           return;
         }
 
+        // ⚡ 出席番号45番（教師用）：F2キーで強制正解
+        const curUser = this.auth ? this.auth.getCurrentUser() : null;
+        if (curUser && Number(curUser.studentNumber) === 45 && (e.key === 'F2' || e.code === 'F2')) {
+          e.preventDefault();
+          this.forceTeacherSolve();
+          return;
+        }
+
         if (e.key === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter') {
           e.preventDefault();
           this.checkAnswerNow();
@@ -1226,6 +1274,11 @@
       // フルスイングボタン
       if (this.btnCheck) {
         this.btnCheck.addEventListener('click', () => this.checkAnswerNow());
+      }
+
+      // ⚡ 教師用強制正解ボタン
+      if (this.btnTeacherSolve) {
+        this.btnTeacherSolve.addEventListener('click', () => this.forceTeacherSolve());
       }
 
       // スコア保存ボタン
