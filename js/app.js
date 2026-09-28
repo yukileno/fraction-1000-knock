@@ -351,7 +351,7 @@
           // 🌟 Push成功後、スプレッドシートから最新の名簿・サマリーをPullしてダッシュボード＆名簿を更新
           try {
             const users = await this.sync.fetchUsersFromSheet(5000);
-            if (users && users.length > 0) {
+            if (users !== null) {
               this.auth.syncWithRemoteUsers(users);
               this.updateGrowthDashboard();
             }
@@ -520,7 +520,7 @@
     async loadRemoteUsers() {
       try {
         const users = await this.sync.fetchUsersFromSheet(12000);
-        if (users && users.length > 0) {
+        if (users !== null) {
           this.auth.syncWithRemoteUsers(users);
         }
       } catch (e) {
@@ -568,6 +568,8 @@
       this.setCoachSpeech(`「${user.nickname}！打席に立て！努力は裏切らんぞ！！」`);
 
       if (isNew) {
+        // 新規入部（またはスプレッドシートから消去されて再登録）の場合、前の古い送信済みログを完全リセット！
+        this.tracker.cleanSyncedLogsForUser(user);
         this.sync.syncUser(user);
       }
     }
@@ -961,10 +963,10 @@
         let check = this.auth.checkStudent(this.selectedClass, this.selectedNumber);
 
         try {
-          // 既知なら3秒、未登録時は混雑時も安心の最大12秒待ってGASから最新名簿を確実に取得
-          const timeout = check.exists ? 3000 : 12000;
+          // 混雑時も安心の最大12秒待ってGASから最新名簿を確実に取得
+          const timeout = 12000;
           const users = await this.sync.fetchUsersFromSheet(timeout);
-          if (users && users.length > 0) {
+          if (users !== null) {
             this.auth.syncWithRemoteUsers(users);
             check = this.auth.checkStudent(this.selectedClass, this.selectedNumber);
           }
@@ -1493,7 +1495,7 @@
       // バックグラウンドで送信先行＆最新データをスプレッドシートから取得して再描画（Push-then-Pull）
       try {
         const pullRes = await this.sync.pushThenPull(8000);
-        if (pullRes.status === 'success' && pullRes.users && pullRes.users.length > 0) {
+        if (pullRes.status === 'success' && pullRes.users !== null) {
           this.auth.syncWithRemoteUsers(pullRes.users);
           this.renderRankingTable();
         }

@@ -321,6 +321,27 @@
       });
     }
 
+    // スプレッドシートから削除された児童、または新規入部児童の古い送信済みログを端末から消去
+    cleanSyncedLogsForUser(userInfo = null) {
+      const user = userInfo || this.currentUser;
+      if (!user || !user.studentNumber) return;
+      const targetClass = this.normalizeClassName(user.className);
+      const targetNum = Number(user.studentNumber);
+      const allLogs = this.getAllLogs();
+      // 同期済み（syncedToSheet: true）の古いログのみを破棄し、未送信ログ（オフライン作業分）は保護
+      const keptLogs = allLogs.filter(l => {
+        if (!l.syncedToSheet) return true;
+        const logClass = this.normalizeClassName(l.className);
+        const logNum = Number(l.studentNumber);
+        return !((!targetClass || !logClass || logClass === targetClass) && logNum === targetNum);
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(keptLogs));
+      } catch (e) {
+        console.error('Failed to clean synced logs:', e);
+      }
+    }
+
     // 「熱血1000本ノック」成績集計＆成長比較
     getStatsComparison(userInfo = null) {
       const todayLogs = this.getTodayLogs(userInfo);
@@ -374,9 +395,12 @@
         pastStats.count = remoteSolved;
         pastStats.totalMinutes = remoteMinutes;
       } else {
-        // 完全オフライン初期など、スプレッドシートのデータがまだない場合の安全なフォールバック
-        totalKnocksDone = pastStats.count + todayStats.count;
-        combinedTotalMinutes = Math.round((pastStats.totalMinutes + (todayStats.count > 0 ? (todayStats.avgSec * todayStats.count / 60) : 0)) * 10) / 10;
+        // 🌟 スプレッドシート側に名簿がない場合（新規登録、またはスプレッドシート側で削除された児童）
+        // 過去の同期済みログは引き継がず、未送信のログのみ（＝新規なら0問）からクリーンに開始！
+        totalKnocksDone = unsyncedCount;
+        combinedTotalMinutes = Math.round((unsyncedSec / 60) * 10) / 10;
+        pastStats.count = 0;
+        pastStats.totalMinutes = 0;
       }
 
       // 1000本ノックのカウントダウン＆カウントアップ計算

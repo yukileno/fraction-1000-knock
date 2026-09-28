@@ -49,16 +49,18 @@
       return `組${classNum}-番${Number(number)}`;
     }
 
-    // スプレッドシートから読み込んだ名簿を取り込む（累計サマリー情報も含む・スプレッドシート最優先）
+    // スプレッドシートから読み込んだ名簿を取り込む（スプレッドシートを完全マスターとし、削除も完全反映）
     syncWithRemoteUsers(users) {
-      if (!Array.isArray(users) || users.length === 0) return;
-      const registry = this.getRegistry();
-      let updated = false;
+      if (!Array.isArray(users)) return;
+
+      // 🌟 スプレッドシート側の名簿でローカルレジストリを完全再構築！
+      // （スプレッドシート側で削除・初期化された児童は、ローカルからも完全に消去される）
+      const newRegistry = {};
 
       users.forEach(u => {
         if (u.className && u.studentNumber && u.nickname) {
           const key = this.makeKey(u.className, u.studentNumber);
-          registry[key] = {
+          newRegistry[key] = {
             className: u.className,
             studentNumber: Number(u.studentNumber),
             nickname: u.nickname,
@@ -69,23 +71,23 @@
             totalMistakes: Number(u.totalMistakes) || 0,
             lastStudyAt: u.lastStudyAt || ''
           };
-          updated = true;
         }
       });
 
-      if (updated) {
-        this.saveRegistry(registry);
+      this.saveRegistry(newRegistry);
 
-        // ログイン中のユーザーがいれば、スプレッドシートの最新サマリー・名前に即時更新
-        if (this.currentUser) {
-          const myKey = this.makeKey(this.currentUser.className, this.currentUser.studentNumber);
-          if (registry[myKey]) {
-            this.currentUser.summary = registry[myKey];
-            if (registry[myKey].nickname) {
-              this.currentUser.nickname = registry[myKey].nickname;
-              this.currentUser.displayName = `${this.currentUser.className} ${this.currentUser.studentNumber}番 ${this.currentUser.nickname}`;
-            }
+      // ログイン中のユーザーがいれば、スプレッドシートの最新サマリー・名前に即時更新
+      if (this.currentUser) {
+        const myKey = this.makeKey(this.currentUser.className, this.currentUser.studentNumber);
+        if (newRegistry[myKey]) {
+          this.currentUser.summary = newRegistry[myKey];
+          if (newRegistry[myKey].nickname) {
+            this.currentUser.nickname = newRegistry[myKey].nickname;
+            this.currentUser.displayName = `${this.currentUser.className} ${this.currentUser.studentNumber}番 ${this.currentUser.nickname}`;
           }
+        } else {
+          // スプレッドシート側で名簿から消去されていた場合はサマリーをクリア
+          this.currentUser.summary = null;
         }
       }
     }

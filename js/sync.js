@@ -211,9 +211,9 @@
       }
     }
 
-    // 📖 スプレッドシートから全児童の名簿データを読み込む（混雑時も安心の最大12秒タイムアウト保証）
+    // 📖 スプレッドシートから全児童の名簿データを読み込む（通信成功時は配列、失敗時はnull）
     async fetchUsersFromSheet(timeoutMs = 12000) {
-      if (!this.gasUrl) return [];
+      if (!this.gasUrl) return null;
       try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -229,10 +229,10 @@
         if (data.status === 'success' && Array.isArray(data.users)) {
           return data.users;
         }
-        return [];
+        return null;
       } catch (err) {
         console.warn('Failed to fetch users from sheet (timeout or network):', err);
-        return [];
+        return null;
       }
     }
 
