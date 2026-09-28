@@ -59,6 +59,8 @@ function doPost(e) {
       if (rows.length > 0) {
         var lastRow = logSheet.getLastRow();
         logSheet.getRange(lastRow + 1, 1, rows.length, 12).setValues(rows);
+        // A列に明示的に日時書式（時分秒まで）を適用して時間表示を保証！
+        logSheet.getRange(lastRow + 1, 1, rows.length, 1).setNumberFormat('yyyy-MM-dd HH:mm:ss');
       }
 
       return ContentService.createTextOutput(JSON.stringify({
@@ -98,7 +100,7 @@ function doPost(e) {
           "=IF($E" + newRow + ">0, ROUND(COUNTIFS('計算ドリル記録'!$B:$B, $B" + newRow + ", '計算ドリル記録'!$C:$C, $C" + newRow + ", '計算ドリル記録'!$J:$J, 0) / $E" + newRow + " * 100), 100)",
           "=IF($E" + newRow + ">0, ROUND(SUMIFS('計算ドリル記録'!$I:$I, '計算ドリル記録'!$B:$B, $B" + newRow + ", '計算ドリル記録'!$C:$C, $C" + newRow + ") / $E" + newRow + "), 0)",
           "=SUMIFS('計算ドリル記録'!$J:$J, '計算ドリル記録'!$B:$B, $B" + newRow + ", '計算ドリル記録'!$C:$C, $C" + newRow + ")",
-          "=IF($E" + newRow + ">0, IFERROR(TEXT(MAXIFS('計算ドリル記録'!$A:$A, '計算ドリル記録'!$B:$B, $B" + newRow + ", '計算ドリル記録'!$C:$C, $C" + newRow + "), \"yyyy-mm-dd hh:mm\"), \"\"), \"\")"
+          "=IF($E" + newRow + ">0, IFERROR(TEXT(MAXIFS('計算ドリル記録'!$A:$A, '計算ドリル記録'!$B:$B, $B" + newRow + ", '計算ドリル記録'!$C:$C, $C" + newRow + "), \"yyyy-mm-dd hh:mm:ss\"), \"\"), \"\")"
         ]);
       }
 
@@ -223,10 +225,15 @@ function doGet(e) {
         var numRows = sh.getLastRow();
         var numCols = sh.getLastColumn();
         var sampleRows = [];
+        var sampleDisplayRows = [];
+        var numberFormats = [];
         if (numRows > 0 && numCols > 0) {
           var startR = Math.max(1, numRows - 10);
           var countR = numRows - startR + 1;
-          sampleRows = sh.getRange(startR, 1, countR, Math.min(15, numCols)).getValues();
+          var range = sh.getRange(startR, 1, countR, Math.min(15, numCols));
+          sampleRows = range.getValues();
+          sampleDisplayRows = range.getDisplayValues();
+          numberFormats = range.getNumberFormats();
         }
         var headers = (numRows > 0 && numCols > 0) ? sh.getRange(1, 1, 1, Math.min(15, numCols)).getValues()[0] : [];
         result.push({
@@ -234,7 +241,9 @@ function doGet(e) {
           lastRow: numRows,
           lastColumn: numCols,
           headers: headers,
-          sampleRows: sampleRows
+          sampleRows: sampleRows,
+          sampleDisplayRows: sampleDisplayRows,
+          numberFormats: numberFormats
         });
       }
       return ContentService.createTextOutput(JSON.stringify({
@@ -272,6 +281,26 @@ function doGet(e) {
         status: 'success',
         message: '児童名簿の全行（E〜J列）に自動計算式を一括適用しました。',
         appliedRows: formulaRes.appliedRows
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 7. テスト行のクリーンアップ
+    if (action === 'clean_test_rows') {
+      var lSheet = ss.getSheetByName('計算ドリル記録');
+      var deleted = 0;
+      if (lSheet) {
+        var lVals = lSheet.getDataRange().getValues();
+        for (var rowIdx = lVals.length - 1; rowIdx >= 1; rowIdx--) {
+          var rData = lVals[rowIdx];
+          if (String(rData[10]).indexOf('test_') === 0 || (Number(rData[2]) === 45 && String(rData[4]).indexOf('1/2 + 1/2') !== -1)) {
+            lSheet.deleteRow(rowIdx + 1);
+            deleted++;
+          }
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({
+        status: 'success',
+        deletedRows: deleted
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -329,7 +358,7 @@ function ensureUserSheetFormulas(userSheet, forceAll) {
       "=IF($E" + r + ">0, ROUND(COUNTIFS('計算ドリル記録'!$B:$B, $B" + r + ", '計算ドリル記録'!$C:$C, $C" + r + ", '計算ドリル記録'!$J:$J, 0) / $E" + r + " * 100), 100)",
       "=IF($E" + r + ">0, ROUND(SUMIFS('計算ドリル記録'!$I:$I, '計算ドリル記録'!$B:$B, $B" + r + ", '計算ドリル記録'!$C:$C, $C" + r + ") / $E" + r + "), 0)",
       "=SUMIFS('計算ドリル記録'!$J:$J, '計算ドリル記録'!$B:$B, $B" + r + ", '計算ドリル記録'!$C:$C, $C" + r + ")",
-      "=IF($E" + r + ">0, IFERROR(TEXT(MAXIFS('計算ドリル記録'!$A:$A, '計算ドリル記録'!$B:$B, $B" + r + ", '計算ドリル記録'!$C:$C, $C" + r + "), \"yyyy-mm-dd hh:mm\"), \"\"), \"\")"
+      "=IF($E" + r + ">0, IFERROR(TEXT(MAXIFS('計算ドリル記録'!$A:$A, '計算ドリル記録'!$B:$B, $B" + r + ", '計算ドリル記録'!$C:$C, $C" + r + "), \"yyyy-mm-dd hh:mm:ss\"), \"\"), \"\")"
     ]);
   }
 
@@ -403,7 +432,7 @@ function recalculateAllUserSummaries() {
         "=IF($E" + newR + ">0, ROUND(COUNTIFS('計算ドリル記録'!$B:$B, $B" + newR + ", '計算ドリル記録'!$C:$C, $C" + newR + ", '計算ドリル記録'!$J:$J, 0) / $E" + newR + " * 100), 100)",
         "=IF($E" + newR + ">0, ROUND(SUMIFS('計算ドリル記録'!$I:$I, '計算ドリル記録'!$B:$B, $B" + newR + ", '計算ドリル記録'!$C:$C, $C" + newR + ") / $E" + newR + "), 0)",
         "=SUMIFS('計算ドリル記録'!$J:$J, '計算ドリル記録'!$B:$B, $B" + newR + ", '計算ドリル記録'!$C:$C, $C" + newR + ")",
-        "=IF($E" + newR + ">0, IFERROR(TEXT(MAXIFS('計算ドリル記録'!$A:$A, '計算ドリル記録'!$B:$B, $B" + newR + ", '計算ドリル記録'!$C:$C, $C" + newR + "), \"yyyy-mm-dd hh:mm\"), \"\"), \"\")"
+        "=IF($E" + newR + ">0, IFERROR(TEXT(MAXIFS('計算ドリル記録'!$A:$A, '計算ドリル記録'!$B:$B, $B" + newR + ", '計算ドリル記録'!$C:$C, $C" + newR + "), \"yyyy-mm-dd hh:mm:ss\"), \"\"), \"\")"
       ]);
       rowMap[sKey] = newR;
       insertedCount++;
@@ -443,6 +472,13 @@ function getOrCreateLogSheet(ss) {
     sheet.setFrozenRows(1);
   }
 
+  // スプレッドシート全体のタイムゾーンを日本時間に保証
+  ss.setSpreadsheetTimeZone('Asia/Tokyo');
+
+  // A列(記録日時)を表示形式「yyyy-MM-dd HH:mm:ss」にして時間まで確実に表示！
+  sheet.getRange('A:A').setNumberFormat('yyyy-MM-dd HH:mm:ss');
+  sheet.setColumnWidth(1, 165);
+
   // E列(問題式)、H列(正解)、L列(日付)をプレーンテキスト書式に設定して日付誤爆を防止
   sheet.getRange('E:E').setNumberFormat('@');
   sheet.getRange('H:H').setNumberFormat('@');
@@ -462,6 +498,13 @@ function fixLogSheetData(ss) {
   var sheet = getOrCreateLogSheet(ss);
   var lastRow = sheet.getLastRow();
   if (lastRow <= 1) return { fixedCount: 0, totalRows: 0 };
+
+  // スプレッドシート全体のタイムゾーンを日本時間に保証
+  ss.setSpreadsheetTimeZone('Asia/Tokyo');
+
+  // A列(記録日時)の全行の表示形式を日付＋時間（yyyy-MM-dd HH:mm:ss）に設定
+  sheet.getRange('A2:A' + lastRow).setNumberFormat('yyyy-MM-dd HH:mm:ss');
+  sheet.setColumnWidth(1, 165);
 
   var dataRange = sheet.getRange(2, 1, lastRow - 1, 12);
   var values = dataRange.getValues();
@@ -509,6 +552,7 @@ function fixLogSheetData(ss) {
 
   // 見栄えの最適化（列幅自動調整）
   sheet.autoResizeColumns(1, 12);
+  sheet.setColumnWidth(1, 165);
 
   return { fixedCount: fixedCount, totalRows: values.length };
 }
@@ -545,7 +589,7 @@ function getOrCreateUserSheet(ss) {
   }
 
   // 列幅を美しく設定
-  sheet.setColumnWidth(1, 140); // 最終更新日時
+  sheet.setColumnWidth(1, 160); // 最終更新日時
   sheet.setColumnWidth(2, 90);  // クラス
   sheet.setColumnWidth(3, 80);  // 出席番号
   sheet.setColumnWidth(4, 120); // ニックネーム
@@ -554,7 +598,10 @@ function getOrCreateUserSheet(ss) {
   sheet.setColumnWidth(7, 100); // 1発正解率(%)
   sheet.setColumnWidth(8, 120); // 平均解答時間(秒)
   sheet.setColumnWidth(9, 100); // 累計ミス回数
-  sheet.setColumnWidth(10, 140);// 最終学習日時
+  sheet.setColumnWidth(10, 160);// 最終学習日時
+
+  // A列(最終更新日時)の表示形式を日付＋時間（yyyy-MM-dd HH:mm:ss）に設定
+  sheet.getRange('A:A').setNumberFormat('yyyy-MM-dd HH:mm:ss');
 
   return sheet;
 }
