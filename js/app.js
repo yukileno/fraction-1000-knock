@@ -336,6 +336,7 @@
 
       // セッション正解数カウント（アプリ起動後・ユーザー切り替え後に解いた問数）
       this.sessionSolvedCount = 0;
+      this.solvedSinceLastBatting = 0;
       this.lastBattingTriggerSolved = -1;
 
       // 🌟 1球入魂！ご褒美バッティングミニゲーム（5問に1回発動）マネージャー
@@ -589,6 +590,7 @@
       }
       this.studentDisplayName.textContent = `⚾ 背番号${user.studentNumber}番 ${user.nickname} 選手`;
       this.sessionSolvedCount = 0;
+      this.solvedSinceLastBatting = 0;
       this.lastBattingTriggerSolved = -1;
 
       // ⚡ 出席番号45番（教師用アカウント）のときのみ強制正解ボタンを表示
@@ -887,20 +889,14 @@
 
           // 🌟 5問に1回、ご褒美バッティングミニゲーム（1球入魂）へ突入！
           this.sessionSolvedCount = (this.sessionSolvedCount || 0) + 1;
+          this.solvedSinceLastBatting = (this.solvedSinceLastBatting || 0) + 1;
           const allCount = (stats && stats.all) ? stats.all.count : 0;
           const todayCount = (stats && stats.today) ? stats.today.count : 0;
 
-          // 条件：
-          // 1. 今のセッションで5問解くごと (5, 10, 15...)
-          // 2. 通算累計正解数が5の倍数に達した (5, 10, 15...)
-          // 3. 本日の正解数が5の倍数に達した (5, 10, 15...)
-          // ※同じ問数での二重発動を防ぐために lastBattingTriggerSolved を更新
-          const isSessionHit = this.sessionSolvedCount > 0 && this.sessionSolvedCount % 5 === 0;
-          const isAllHit = allCount > 0 && allCount % 5 === 0 && this.lastBattingTriggerSolved !== allCount;
-          const isTodayHit = todayCount > 0 && todayCount % 5 === 0 && this.lastBattingTriggerSolved !== allCount;
-
-          if ((isSessionHit || isAllHit || isTodayHit) && this.battingGame) {
-            this.lastBattingTriggerSolved = allCount;
+          // 🌟 前回のミニゲーム発動からきっかり5問正解した時に必ず発動！
+          // （※過去の累計や本日の問数のズレで2問や3問で突然発動してしまう現象を完全根絶）
+          if (this.solvedSinceLastBatting >= 5 && this.battingGame) {
+            this.solvedSinceLastBatting = 0; // 次の5問に向けてカウンターをクリア
             if (this.tracker && typeof this.tracker.pause === 'function') {
               this.tracker.pause('batting'); // ドリルのタイマーを一時停止
             }

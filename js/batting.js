@@ -16,17 +16,17 @@
 })(typeof globalThis !== 'undefined' ? globalThis : window, function () {
   'use strict';
 
-  // デフォルトのライバル投手データプール（オフライン時・初期用）
+  // デフォルトのライバル投手データプール（名簿不足時・初期用）
   const DEFAULT_RIVAL_PITCHERS = [
-    { name: "あたらし ひろと", score: 83, homeruns: 74, maxDistance: 152, title: "豪速球の守護神" },
-    { name: "わたなべ", score: 92, homeruns: 62, maxDistance: 154, title: "怪物スラッガー投手" },
-    { name: "二宮悠太", score: 80, homeruns: 40, maxDistance: 140, title: "本格派エース" },
-    { name: "そうた", score: 55, homeruns: 33, maxDistance: 130, title: "技巧派ドクターK" },
-    { name: "あおい", score: 52, homeruns: 28, maxDistance: 135, title: "急降下フォークの使い手" },
-    { name: "森くん", score: 31, homeruns: 15, maxDistance: 144, title: "魔球カーブマスター" },
-    { name: "柴田", score: 30, homeruns: 28, maxDistance: 130, title: "快速サイドスロー" },
-    { name: "翔真", score: 20, homeruns: 8, maxDistance: 110, title: "期待の本格派右腕" },
-    { name: "こゆり", score: 9, homeruns: 6, maxDistance: 95, title: "ルーキー投手" }
+    { name: "豪速球ピッチングマシン", score: 90, homeruns: 70, maxDistance: 155, title: "猛特訓ピッチングマシン" },
+    { name: "熱血！鬼監督", score: 95, homeruns: 80, maxDistance: 160, title: "魂のノックを放つ名将" },
+    { name: "剛腕エース", score: 85, homeruns: 50, maxDistance: 148, title: "本格派剛腕ピッチャー" },
+    { name: "技巧派ドクターK", score: 70, homeruns: 35, maxDistance: 138, title: "急降下フォークの使い手" },
+    { name: "魔球マスター", score: 65, homeruns: 30, maxDistance: 132, title: "七色の変化球サウスポー" },
+    { name: "快速サイドスロー", score: 50, homeruns: 20, maxDistance: 125, title: "鋭い横曲がりスライダー" },
+    { name: "本格派サブマリン", score: 40, homeruns: 15, maxDistance: 118, title: "浮き上がるアンダースロー" },
+    { name: "期待のルーキー", score: 30, homeruns: 10, maxDistance: 105, title: "全力投球の新星" },
+    { name: "熱血キャプテン", score: 20, homeruns: 5, maxDistance: 95, title: "チームを引っ張るリーダー" }
   ];
 
   function escapeHtml(str) {
@@ -589,7 +589,7 @@
       };
     }
 
-    getRivalCandidatesPool() {
+    getRivalCandidatesPool(excludeNickname = '') {
       const uniqueMap = new Map();
       let users = [];
       try {
@@ -605,6 +605,7 @@
       for (const u of sortedUsers) {
         const name = (u.nickname || (u.className ? `${u.className} ${u.studentNumber}番` : '')).trim();
         if (!name || uniqueMap.has(name)) continue;
+        if (excludeNickname && name === excludeNickname) continue; // 自分自身は相手投手から除外
         const profile = this.buildPitcherProfile({
           name: name,
           totalSolved: u.totalSolved || 0
@@ -614,7 +615,7 @@
         if (uniqueMap.size >= 15) break;
       }
 
-      // デフォルトのライバル投手で補完
+      // デフォルトのライバル投手で補完（名簿が少ない時・オフライン時）
       for (const d of DEFAULT_RIVAL_PITCHERS) {
         if (!uniqueMap.has(d.name)) {
           const profile = this.buildPitcherProfile(d, rank);
@@ -626,8 +627,8 @@
       return Array.from(uniqueMap.values());
     }
 
-    selectRivalPitcher() {
-      const pool = this.getRivalCandidatesPool();
+    selectRivalPitcher(excludeNickname = '') {
+      const pool = this.getRivalCandidatesPool(excludeNickname);
       return pool[Math.floor(Math.random() * pool.length)];
     }
 
@@ -659,7 +660,7 @@
     }
 
     // --- ルーレット演出 ---
-    startRivalRoulette(targetPitcher, onComplete) {
+    startRivalRoulette(targetPitcher, onComplete, excludeNickname = '') {
       this.clearRouletteAnimation();
 
       if (!this.dom.battingRouletteModal || !this.dom.rouletteReelStrip) {
@@ -670,7 +671,7 @@
       this.dom.rouletteReelStrip.innerHTML = '';
       this.dom.rouletteReelStrip.style.transform = 'translate3d(0, 0, 0)';
 
-      const pool = this.getRivalCandidatesPool();
+      const pool = this.getRivalCandidatesPool(excludeNickname);
       const CARD_HEIGHT = 72;
       const TOTAL_CARDS = 38;
       const cardElements = [];
@@ -943,7 +944,8 @@
       this.bBall.hitResult = null;
       this.bTrackingBall.active = false;
 
-      this.currentRivalPitcher = this.selectRivalPitcher();
+      const playerNick = (playerStats && playerStats.nickname) ? String(playerStats.nickname).trim() : '';
+      this.currentRivalPitcher = this.selectRivalPitcher(playerNick);
 
       if (this.dom.battingRivalCard) this.dom.battingRivalCard.classList.add('hide-rival');
       if (this.dom.battingPitchCallout) this.dom.battingPitchCallout.classList.remove('show');
@@ -975,7 +977,7 @@
             this.throwRewardPitch();
           }
         }, 1000);
-      });
+      }, playerNick);
     }
 
     throwRewardPitch() {

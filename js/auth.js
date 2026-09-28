@@ -220,6 +220,11 @@
       return list;
     }
 
+    // 登録ユーザー一覧取得（バッティングミニゲーム等の対戦相手プール用）
+    getAllUsers() {
+      return this.getAllUsersForRanking();
+    }
+
     getCurrentUser() {
       return this.currentUser;
     }
