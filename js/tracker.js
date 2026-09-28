@@ -305,6 +305,22 @@
       return logs;
     }
 
+    // 指定ユーザーの未送信（未同期）ログ一覧を取得
+    getUnsyncedLogsForUser(userInfo = null) {
+      const user = userInfo || this.currentUser;
+      const allLogs = this.getAllLogs();
+      const unsynced = allLogs.filter(l => !l.syncedToSheet);
+      if (!user || !user.studentNumber) return unsynced;
+      const targetClass = this.normalizeClassName(user.className);
+      const targetNum = Number(user.studentNumber);
+      return unsynced.filter(l => {
+        if (!l.className && !l.studentNumber) return true;
+        const logClass = this.normalizeClassName(l.className);
+        const logNum = Number(l.studentNumber);
+        return (!targetClass || !logClass || logClass === targetClass) && logNum === targetNum;
+      });
+    }
+
     // 「熱血1000本ノック」成績集計＆成長比較
     getStatsComparison(userInfo = null) {
       const todayLogs = this.getTodayLogs(userInfo);
@@ -329,21 +345,39 @@
       const todayStats = calcStats(todayLogs);
       const pastStats = calcStats(pastLogs);
 
-      // スプレッドシート由来の過去サマリーを統合
-      if (userInfo && userInfo.summary) {
+      // 🌟 オフラインファースト＆スプレッドシート最優先のハイブリッド集計
+      // スプレッドシート由来のサマリー（確定値）が存在する場合はスプレッドシートを最優先（正）とし、
+      // まだスプレッドシートに送信できていない未送信ログのみを加算してリアルタイム反映する（巻き戻り防止）
+      const unsyncedLogs = this.getUnsyncedLogsForUser(userInfo);
+      const unsyncedCount = unsyncedLogs.length;
+      const unsyncedSec = unsyncedLogs.reduce((sum, l) => sum + (l.timeSpentSeconds || 0), 0);
+
+      let totalKnocksDone = 0;
+      let combinedTotalMinutes = 0;
+
+      if (userInfo && userInfo.summary && (userInfo.summary.totalSolved !== undefined && userInfo.summary.totalSolved !== null)) {
         const s = userInfo.summary;
         const remoteSolved = Number(s.totalSolved) || 0;
-        if (pastStats.count === 0 && remoteSolved > 0) {
-          pastStats.count = remoteSolved;
-          pastStats.totalMinutes = Number(s.totalMinutes) || 0;
-          pastStats.accuracy = (s.accuracy !== null && s.accuracy !== undefined) ? Number(s.accuracy) : 100;
-          pastStats.avgSec = (s.avgSeconds !== null && s.avgSeconds !== undefined) ? Number(s.avgSeconds) : 0;
-        }
-      }
+        const remoteMinutes = Number(s.totalMinutes) || 0;
 
-      // 通算累計ノック完了数
-      const totalKnocksDone = pastStats.count + todayStats.count;
-      const combinedTotalMinutes = Math.round((pastStats.totalMinutes + (todayStats.count > 0 ? (todayStats.avgSec * todayStats.count / 60) : 0)) * 10) / 10;
+        // 通算正解数 = スプレッドシート確定値 ＋ 未送信ログ数（オフライン中に解いた分が絶対に消えない）
+        totalKnocksDone = remoteSolved + unsyncedCount;
+        combinedTotalMinutes = Math.round((remoteMinutes + (unsyncedSec / 60)) * 10) / 10;
+
+        // 通算打率・スイング速度もスプレッドシートの値を最優先（マスター）とする
+        if (s.accuracy !== null && s.accuracy !== undefined) {
+          pastStats.accuracy = Number(s.accuracy);
+        }
+        if (s.avgSeconds !== null && s.avgSeconds !== undefined) {
+          pastStats.avgSec = Number(s.avgSeconds);
+        }
+        pastStats.count = remoteSolved;
+        pastStats.totalMinutes = remoteMinutes;
+      } else {
+        // 完全オフライン初期など、スプレッドシートのデータがまだない場合の安全なフォールバック
+        totalKnocksDone = pastStats.count + todayStats.count;
+        combinedTotalMinutes = Math.round((pastStats.totalMinutes + (todayStats.count > 0 ? (todayStats.avgSec * todayStats.count / 60) : 0)) * 10) / 10;
+      }
 
       // 1000本ノックのカウントダウン＆カウントアップ計算
       const target = this.targetKnocks;

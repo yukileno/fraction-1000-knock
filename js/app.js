@@ -344,9 +344,21 @@
         onIdleStateChange: (isIdle) => this.handleIdleChange(isIdle)
       });
 
-      // スプレッドシート同期マネージャー
+      // スプレッドシート同期マネージャー（送信先行＆完了後自動Pull更新）
       this.sync = new SheetSync({
-        onStatusChange: (status) => this.updateSyncButton(status)
+        onStatusChange: (status) => this.updateSyncButton(status),
+        onSyncSuccess: async (info) => {
+          // 🌟 Push成功後、スプレッドシートから最新の名簿・サマリーをPullしてダッシュボード＆名簿を更新
+          try {
+            const users = await this.sync.fetchUsersFromSheet(5000);
+            if (users && users.length > 0) {
+              this.auth.syncWithRemoteUsers(users);
+              this.updateGrowthDashboard();
+            }
+          } catch (e) {
+            console.warn('Post-sync pull error:', e);
+          }
+        }
       });
 
       this.initCoachImage();
@@ -1478,11 +1490,11 @@
       // まずローカル保存済みの名簿から即時描画
       this.renderRankingTable();
 
-      // バックグラウンドで最新データをスプレッドシートから取得して再描画
+      // バックグラウンドで送信先行＆最新データをスプレッドシートから取得して再描画（Push-then-Pull）
       try {
-        const users = await this.sync.fetchUsersFromSheet(8000);
-        if (users && users.length > 0) {
-          this.auth.syncWithRemoteUsers(users);
+        const pullRes = await this.sync.pushThenPull(8000);
+        if (pullRes.status === 'success' && pullRes.users && pullRes.users.length > 0) {
+          this.auth.syncWithRemoteUsers(pullRes.users);
           this.renderRankingTable();
         }
       } catch (e) {
@@ -1512,16 +1524,16 @@
         ? this.auth.getAllUsersForRanking()
         : [];
 
-      // 現在ログイン中の児童の最新データをマージ（未同期の本日のローカルログも加味）
+      // 現在ログイン中の児童の最新データをマージ（スプレッドシート確定値 ＋ 本日の未送信ログ数）
       if (currentUser) {
         const stats = this.tracker.getStatsComparison(currentUser);
-        const myTotal = stats.knocks.done;
+        const myTotal = stats.knocks.done; // スプレッドシート確定値 ＋ 未送信ログ数（巻き戻りなし＆シート最優先）
         const myKey = this.auth.makeKey(currentUser.className, currentUser.studentNumber);
 
         let found = false;
         allUsers.forEach(u => {
           if (this.auth.makeKey(u.className, u.studentNumber) === myKey) {
-            u.totalSolved = Math.max(Number(u.totalSolved) || 0, myTotal);
+            u.totalSolved = myTotal; // スプレッドシート側の修正を最優先反映
             if (stats.today.accuracy !== null && stats.today.accuracy !== undefined) {
               u.accuracy = stats.today.accuracy;
             }

@@ -49,7 +49,7 @@
       return `組${classNum}-番${Number(number)}`;
     }
 
-    // スプレッドシートから読み込んだ名簿を取り込む（累計サマリー情報も含む）
+    // スプレッドシートから読み込んだ名簿を取り込む（累計サマリー情報も含む・スプレッドシート最優先）
     syncWithRemoteUsers(users) {
       if (!Array.isArray(users) || users.length === 0) return;
       const registry = this.getRegistry();
@@ -75,6 +75,18 @@
 
       if (updated) {
         this.saveRegistry(registry);
+
+        // ログイン中のユーザーがいれば、スプレッドシートの最新サマリー・名前に即時更新
+        if (this.currentUser) {
+          const myKey = this.makeKey(this.currentUser.className, this.currentUser.studentNumber);
+          if (registry[myKey]) {
+            this.currentUser.summary = registry[myKey];
+            if (registry[myKey].nickname) {
+              this.currentUser.nickname = registry[myKey].nickname;
+              this.currentUser.displayName = `${this.currentUser.className} ${this.currentUser.studentNumber}番 ${this.currentUser.nickname}`;
+            }
+          }
+        }
       }
     }
 

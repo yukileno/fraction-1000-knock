@@ -23,12 +23,26 @@
       this.gasUrl = (saved !== null && saved !== undefined) ? saved : DEFAULT_GAS_URL;
 
       this.onStatusChange = options.onStatusChange || (() => {});
+      this.onSyncSuccess = options.onSyncSuccess || (() => {});
       this.autoSyncIntervalMs = 60 * 1000; // 1分に1回
       this.isSyncing = false;
       this.lastSyncTime = null;
       this.timerId = null;
 
       this.startAutoSync();
+      this.setupOnlineListener();
+    }
+
+    setupOnlineListener() {
+      if (typeof window !== 'undefined') {
+        window.addEventListener('online', async () => {
+          const unsynced = this.getUnsyncedLogs();
+          if (unsynced.length > 0) {
+            console.log(`[SheetSync] 📶 ネット復帰検知: 未送信ログ ${unsynced.length} 件をスプレッドシートへ自動送信します (Push先行)`);
+            await this.syncNow(false);
+          }
+        });
+      }
     }
 
     setUrl(url) {
@@ -142,6 +156,15 @@
         this.isSyncing = false;
 
         this.notify('saved', 0);
+
+        try {
+          if (typeof this.onSyncSuccess === 'function') {
+            this.onSyncSuccess({ count: syncedIds.length, isManual });
+          }
+        } catch (cbErr) {
+          console.warn('Error in onSyncSuccess callback:', cbErr);
+        }
+
         return { status: 'success', count: syncedIds.length };
       } catch (err) {
         console.warn('Sync failed (offline or network issue):', err);
@@ -149,6 +172,21 @@
         this.notify('error', unsynced.length, err.message);
         return { status: 'error', error: err.message, count: unsynced.length };
       }
+    }
+
+    // 🌟 送信先行型同期（Push-then-Pull）
+    // まず未送信ログをスプレッドシートへ送信（Push）。送信成功（または未送信なし）の後に最新名簿（Pull）を取得して返す。
+    // オフライン等で未送信の送信が失敗した場合は、古いデータで上書きしないようPullをスキップする。
+    async pushThenPull(timeoutMs = 8000) {
+      const unsynced = this.getUnsyncedLogs();
+      if (unsynced.length > 0) {
+        const pushRes = await this.syncNow(false);
+        if (pushRes.status === 'error') {
+          return { status: 'push_failed', error: pushRes.error };
+        }
+      }
+      const users = await this.fetchUsersFromSheet(timeoutMs);
+      return { status: 'success', users: users };
     }
 
     // ユーザー名簿の同期（名前登録時）
