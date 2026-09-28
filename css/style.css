@@ -281,7 +281,7 @@ main.field-main {
 
 .batter-box {
   width: 100%;
-  max-width: 920px;
+  max-width: 980px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -290,6 +290,8 @@ main.field-main {
 
 /* 劇画風カード：背景画像の上に浮かび上がるクリアなパネル */
 .card.comic-card {
+  flex: 1 1 auto;
+  min-width: 0;
   background: rgba(255, 255, 255, 0.90);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -548,28 +550,42 @@ main.field-main {
   box-shadow: 2px 2px 0px #000;
 }
 
-/* 猛特訓スコアボード（ダッシュボード） */
+/* 対決ステージ下：左に特訓スコア4枠 ＆ 右に問題枠の配置 */
+.quiz-stage-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+}
+
+/* 猛特訓スコアボード（左側・縦4枠） */
 .growth-dashboard.comic-dashboard {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
+  flex: 0 0 176px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .growth-card.comic-metric-card {
+  flex: 1 1 0;
   background: rgba(255, 255, 255, 0.93);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   border: 2px solid var(--border-comic);
   border-radius: 10px;
-  padding: 8px 12px;
+  padding: 6px 10px;
   box-shadow: var(--shadow-comic);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  min-height: 0;
 }
 
 .growth-card-header {
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   color: #475569;
   font-weight: 900;
   display: flex;
@@ -580,35 +596,43 @@ main.field-main {
 .metric-tag {
   background: #f1f5f9;
   color: #334155;
-  font-size: 0.65rem;
-  padding: 1px 5px;
+  font-size: 0.62rem;
+  padding: 1px 4px;
   border-radius: 4px;
+  white-space: nowrap;
 }
 
 .growth-main-val {
-  font-size: 1.45rem;
+  font-size: 1.35rem;
   font-weight: 900;
   color: #0f172a;
-  line-height: 1.2;
+  line-height: 1.15;
 }
 
 .growth-sub-val {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   color: #64748b;
   font-weight: bold;
-  margin-top: 2px;
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .growth-badge {
   display: inline-flex;
   align-items: center;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 900;
   padding: 2px 6px;
   border-radius: 4px;
-  margin-top: 4px;
+  margin-top: 3px;
   width: fit-content;
+  max-width: 100%;
   border: 1px solid transparent;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .growth-badge.faster {
@@ -1055,12 +1079,15 @@ canvas#scratchCanvas {
     gap: 6px;
   }
   .batter-box {
-    max-width: 620px;
-    gap: 6px;
+    max-width: 960px;
+    gap: 4px;
   }
   .coach-speech-bubble {
     padding: 4px 12px;
     font-size: 0.88rem;
+  }
+  .quiz-stage-row {
+    gap: 8px;
   }
   .card.comic-card {
     padding: 8px 14px;
@@ -1122,25 +1149,26 @@ canvas#scratchCanvas {
     max-width: 360px;
   }
   .growth-dashboard.comic-dashboard {
-    gap: 6px;
+    flex: 0 0 164px;
+    gap: 5px;
   }
   .growth-card.comic-metric-card {
     padding: 4px 8px;
     border-radius: 8px;
   }
   .growth-card-header {
-    font-size: 0.7rem;
+    font-size: 0.68rem;
   }
   .growth-main-val {
-    font-size: 1.15rem;
+    font-size: 1.2rem;
     margin: 1px 0;
   }
   .growth-sub-val {
-    font-size: 0.65rem;
+    font-size: 0.62rem;
   }
   .growth-badge {
-    font-size: 0.65rem;
-    padding: 1px 6px;
+    font-size: 0.62rem;
+    padding: 1px 4px;
   }
 }
 
@@ -1787,7 +1815,20 @@ canvas#scratchCanvas {
   font-size: 1.15rem;
 }
 
-/* レスポンシブ: スマホ等の縦長画面 */
+/* レスポンシブ: 画面幅が狭い場合（タブレット・スマホ等） */
+@media (max-width: 860px) {
+  .quiz-stage-row {
+    flex-direction: column-reverse;
+  }
+  .growth-dashboard.comic-dashboard {
+    flex: none;
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+}
+
 @media (max-width: 768px) {
   .comic-card-body {
     flex-direction: column;
@@ -1796,6 +1837,12 @@ canvas#scratchCanvas {
     width: 100%;
     max-width: 380px;
     margin: 0 auto;
+  }
+}
+
+@media (max-width: 520px) {
+  .growth-dashboard.comic-dashboard {
+    grid-template-columns: 1fr;
   }
 }
 

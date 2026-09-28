@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>熱血！分数1000本ノック 〜猛特訓編〜</title>
-  <link rel="stylesheet" href="css/style.css?v=20260928_12">
-  <link rel="stylesheet" href="css/batting.css?v=20260928_12">
+  <link rel="stylesheet" href="css/style.css?v=20260928_14">
+  <link rel="stylesheet" href="css/batting.css?v=20260928_14">
 </head>
 <body class="theme-nekketsu">
 
@@ -95,143 +95,147 @@
           </div>
         </div>
 
-        <div class="card comic-card">
-          <div class="problem-header">
-            <span class="badge-pitch" id="pitchNumberBadge">第 1 球！ 勝負！</span>
-            <span class="badge-category comic-badge" id="categoryBadge">帯分数の足し算</span>
-            <span class="probTimerBadge" id="probTimerBadge">勝負時間: 0秒</span>
+        <!-- 対決ステージ下：左側に特訓スコア4枠 ＆ 右側に問題枠 -->
+        <div class="quiz-stage-row">
+          <!-- 猛特訓スコアボード（ダッシュボード4枠） -->
+          <div class="growth-dashboard comic-dashboard">
+            <!-- 1. 本日正解数 -->
+            <div class="growth-card comic-metric-card">
+              <div class="growth-card-header">
+                <span>⚾ 本日の正解</span>
+                <span class="metric-tag">今日</span>
+              </div>
+              <div class="growth-main-val" id="statTodaySolved">0問</div>
+              <div class="growth-sub-val" id="statTodayTime">特打時間: 0分</div>
+              <div class="growth-badge normal" id="statSessionBadge">本日猛練習中！</div>
+            </div>
+
+            <!-- 2. 1発正解率 -->
+            <div class="growth-card comic-metric-card">
+              <div class="growth-card-header">
+                <span>🎯 1発正解率</span>
+                <span class="metric-tag">今日</span>
+              </div>
+              <div class="growth-main-val" id="statTodayAcc">1.000</div>
+              <div class="growth-sub-val" id="statPastAcc">通算: -</div>
+              <div class="growth-badge normal" id="statAccBadge">初打席</div>
+            </div>
+
+            <!-- 3. スイング速度（平均解答秒数） -->
+            <div class="growth-card comic-metric-card">
+              <div class="growth-card-header">
+                <span>⚡ スイング速度</span>
+                <span class="metric-tag">1球平均</span>
+              </div>
+              <div class="growth-main-val" id="statTodaySpeed">-</div>
+              <div class="growth-sub-val" id="statPastSpeed">通算: -</div>
+              <div class="growth-badge normal" id="statSpeedBadge">打席分析中</div>
+            </div>
+
+            <!-- 4. 累計正解問題数 -->
+            <div class="growth-card comic-metric-card">
+              <div class="growth-card-header">
+                <span>🏆 累計正解数</span>
+                <span class="metric-tag">累計</span>
+              </div>
+              <div class="growth-main-val" id="statAllSolved">0問</div>
+              <div class="growth-sub-val" id="statAllTime">総特打時間: 0分</div>
+              <div class="growth-badge faster" id="statComboBadge">連続 0 球ヒット！</div>
+            </div>
           </div>
 
-          <!-- カード本体（左: 問題・入力枠、右: 特訓テンキー） -->
-          <div class="comic-card-body">
-            <!-- 左側：問題数式 ＆ 解答入力枠 ＆ 判定メッセージ -->
-            <div class="problem-main-pane">
-              <!-- 数式表示（教科書スタイルの縦書き分数） -->
-              <div class="formula-display comic-formula" id="formulaDisplay">
-                <!-- JSで動的生成 -->
-              </div>
+          <!-- 右側：問題の枠（カード本体） -->
+          <div class="card comic-card">
+            <div class="problem-header">
+              <span class="badge-pitch" id="pitchNumberBadge">第 1 球！ 勝負！</span>
+              <span class="badge-category comic-badge" id="categoryBadge">帯分数の足し算</span>
+              <span class="probTimerBadge" id="probTimerBadge">勝負時間: 0秒</span>
+            </div>
 
-              <!-- 解答入力エリア（バッターボックス） -->
-              <div class="answer-area">
-                <div class="input-boxes comic-inputs">
-                  <!-- 整数部分 -->
-                  <div class="input-whole-wrap">
-                    <input type="text" id="inputWhole" class="input-box active-target" inputmode="none" placeholder="" maxlength="2">
-                    <span class="box-label">整数（なしは空欄）</span>
+            <!-- カード本体（左: 問題・入力枠、右: 特訓テンキー） -->
+            <div class="comic-card-body">
+              <!-- 左側：問題数式 ＆ 解答入力枠 ＆ 判定メッセージ -->
+              <div class="problem-main-pane">
+                <!-- 数式表示（教科書スタイルの縦書き分数） -->
+                <div class="formula-display comic-formula" id="formulaDisplay">
+                  <!-- JSで動的生成 -->
+                </div>
+
+                <!-- 解答入力エリア（バッターボックス） -->
+                <div class="answer-area">
+                  <div class="input-boxes comic-inputs">
+                    <!-- 整数部分 -->
+                    <div class="input-whole-wrap">
+                      <input type="text" id="inputWhole" class="input-box active-target" inputmode="none" placeholder="" maxlength="2">
+                      <span class="box-label">整数（なしは空欄）</span>
+                    </div>
+
+                    <!-- 分数部分 -->
+                    <div class="input-frac-wrap">
+                      <input type="text" id="inputNum" class="input-box input-box-small" inputmode="none" placeholder="分子" maxlength="3">
+                      <div class="input-frac-divider"></div>
+                      <input type="text" id="inputDen" class="input-box input-box-small" inputmode="none" placeholder="分母" maxlength="3">
+                    </div>
                   </div>
 
-                  <!-- 分数部分 -->
-                  <div class="input-frac-wrap">
-                    <input type="text" id="inputNum" class="input-box input-box-small" inputmode="none" placeholder="分子" maxlength="3">
-                    <div class="input-frac-divider"></div>
-                    <input type="text" id="inputDen" class="input-box input-box-small" inputmode="none" placeholder="分母" maxlength="3">
+                  <!-- 監督の喝＆判定メッセージ領域 -->
+                  <div class="feedback-box feedback-empty" id="feedbackBox"></div>
+
+                  <!-- 操作ガイド -->
+                  <div class="keyboard-guide">
+                    <span><span class="kbd-badge">右のテンキー</span> または <span class="kbd-badge">キーボード</span> で入力</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 右側：特訓テンキーパッド（タブレット・Chromebookタッチ完全対応） -->
+              <div class="numpad-pane" id="numpadPane">
+                <!-- 枠切り替えインジケータータブ -->
+                <div class="slot-tabs-wrap">
+                  <span class="slot-tabs-label">入力枠:</span>
+                  <div class="slot-tabs">
+                    <button type="button" class="slot-tab-btn active" data-slot="whole" id="slotTabWhole">整数</button>
+                    <button type="button" class="slot-tab-btn" data-slot="num" id="slotTabNum">分子</button>
+                    <button type="button" class="slot-tab-btn" data-slot="den" id="slotTabDen">分母</button>
                   </div>
                 </div>
 
-                <!-- 監督の喝＆判定メッセージ領域 -->
-                <div class="feedback-box feedback-empty" id="feedbackBox"></div>
+                <!-- テンキーグリッド -->
+                <div class="numpad-grid">
+                  <button type="button" class="numpad-btn num-key" data-num="7">7</button>
+                  <button type="button" class="numpad-btn num-key" data-num="8">8</button>
+                  <button type="button" class="numpad-btn num-key" data-num="9">9</button>
 
-                <!-- 操作ガイド -->
-                <div class="keyboard-guide">
-                  <span><span class="kbd-badge">右のテンキー</span> または <span class="kbd-badge">キーボード</span> で入力</span>
+                  <button type="button" class="numpad-btn num-key" data-num="4">4</button>
+                  <button type="button" class="numpad-btn num-key" data-num="5">5</button>
+                  <button type="button" class="numpad-btn num-key" data-num="6">6</button>
+
+                  <button type="button" class="numpad-btn num-key" data-num="1">1</button>
+                  <button type="button" class="numpad-btn num-key" data-num="2">2</button>
+                  <button type="button" class="numpad-btn num-key" data-num="3">3</button>
+
+                  <button type="button" class="numpad-btn num-key" data-num="0">0</button>
+                  <button type="button" class="numpad-btn action-key key-bs" id="btnNumpadBs" title="1文字消す">⌫ 消す</button>
+                  <button type="button" class="numpad-btn action-key key-ac" id="btnNumpadAc" title="クリア">AC</button>
                 </div>
+
+                <!-- 枠移動ボタン（目立つ親指ポジション） -->
+                <button type="button" class="btn-next-slot" id="btnNumpadNextSlot">
+                  <span class="next-slot-main">▶ つぎの枠へ移動</span>
+                  <span class="next-slot-sub">（整数 ➡ 分子 ➡ 分母）</span>
+                </button>
+
+                <!-- フルスイングボタン -->
+                <button type="button" class="btn-check btn-swing" id="btnCheck">
+                  🔥 魂のフルスイング！ (Enter)
+                </button>
+
+                <!-- ⚡ 教師用：問題強制正解ボタン（出席番号45番のみ表示） -->
+                <button type="button" class="btn-teacher-solve hide" id="btnTeacherSolve" title="先生専用：この問題を一発で正解にします [F2キーでも実行可]">
+                  ⚡ 強制正解（先生用）
+                </button>
               </div>
             </div>
-
-            <!-- 右側：特訓テンキーパッド（タブレット・Chromebookタッチ完全対応） -->
-            <div class="numpad-pane" id="numpadPane">
-              <!-- 枠切り替えインジケータータブ -->
-              <div class="slot-tabs-wrap">
-                <span class="slot-tabs-label">入力枠:</span>
-                <div class="slot-tabs">
-                  <button type="button" class="slot-tab-btn active" data-slot="whole" id="slotTabWhole">整数</button>
-                  <button type="button" class="slot-tab-btn" data-slot="num" id="slotTabNum">分子</button>
-                  <button type="button" class="slot-tab-btn" data-slot="den" id="slotTabDen">分母</button>
-                </div>
-              </div>
-
-              <!-- テンキーグリッド -->
-              <div class="numpad-grid">
-                <button type="button" class="numpad-btn num-key" data-num="7">7</button>
-                <button type="button" class="numpad-btn num-key" data-num="8">8</button>
-                <button type="button" class="numpad-btn num-key" data-num="9">9</button>
-
-                <button type="button" class="numpad-btn num-key" data-num="4">4</button>
-                <button type="button" class="numpad-btn num-key" data-num="5">5</button>
-                <button type="button" class="numpad-btn num-key" data-num="6">6</button>
-
-                <button type="button" class="numpad-btn num-key" data-num="1">1</button>
-                <button type="button" class="numpad-btn num-key" data-num="2">2</button>
-                <button type="button" class="numpad-btn num-key" data-num="3">3</button>
-
-                <button type="button" class="numpad-btn num-key" data-num="0">0</button>
-                <button type="button" class="numpad-btn action-key key-bs" id="btnNumpadBs" title="1文字消す">⌫ 消す</button>
-                <button type="button" class="numpad-btn action-key key-ac" id="btnNumpadAc" title="クリア">AC</button>
-              </div>
-
-              <!-- 枠移動ボタン（目立つ親指ポジション） -->
-              <button type="button" class="btn-next-slot" id="btnNumpadNextSlot">
-                <span class="next-slot-main">▶ つぎの枠へ移動</span>
-                <span class="next-slot-sub">（整数 ➡ 分子 ➡ 分母）</span>
-              </button>
-
-              <!-- フルスイングボタン -->
-              <button type="button" class="btn-check btn-swing" id="btnCheck">
-                🔥 魂のフルスイング！ (Enter)
-              </button>
-
-              <!-- ⚡ 教師用：問題強制正解ボタン（出席番号45番のみ表示） -->
-              <button type="button" class="btn-teacher-solve hide" id="btnTeacherSolve" title="先生専用：この問題を一発で正解にします [F2キーでも実行可]">
-                ⚡ 強制正解（先生用）
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- 猛特訓スコアボード（ダッシュボード） -->
-        <div class="growth-dashboard comic-dashboard">
-          <!-- 1. 本日正解数 -->
-          <div class="growth-card comic-metric-card">
-            <div class="growth-card-header">
-              <span>⚾ 本日の正解</span>
-              <span class="metric-tag">今日</span>
-            </div>
-            <div class="growth-main-val" id="statTodaySolved">0問</div>
-            <div class="growth-sub-val" id="statTodayTime">特打時間: 0分</div>
-            <div class="growth-badge normal" id="statSessionBadge">本日猛練習中！</div>
-          </div>
-
-          <!-- 2. 1発正解率 -->
-          <div class="growth-card comic-metric-card">
-            <div class="growth-card-header">
-              <span>🎯 1発正解率</span>
-              <span class="metric-tag">今日</span>
-            </div>
-            <div class="growth-main-val" id="statTodayAcc">1.000</div>
-            <div class="growth-sub-val" id="statPastAcc">通算: -</div>
-            <div class="growth-badge normal" id="statAccBadge">初打席</div>
-          </div>
-
-          <!-- 3. スイング速度（平均解答秒数） -->
-          <div class="growth-card comic-metric-card">
-            <div class="growth-card-header">
-              <span>⚡ スイング速度</span>
-              <span class="metric-tag">1球平均</span>
-            </div>
-            <div class="growth-main-val" id="statTodaySpeed">-</div>
-            <div class="growth-sub-val" id="statPastSpeed">通算: -</div>
-            <div class="growth-badge normal" id="statSpeedBadge">打席分析中</div>
-          </div>
-
-          <!-- 4. 累計正解問題数 -->
-          <div class="growth-card comic-metric-card">
-            <div class="growth-card-header">
-              <span>🏆 累計正解数</span>
-              <span class="metric-tag">累計</span>
-            </div>
-            <div class="growth-main-val" id="statAllSolved">0問</div>
-            <div class="growth-sub-val" id="statAllTime">総特打時間: 0分</div>
-            <div class="growth-badge faster" id="statComboBadge">連続 0 球ヒット！</div>
           </div>
         </div>
       </section>
@@ -628,12 +632,12 @@
   <audio id="audioHomerun" src="sound/homerun.mp3" preload="auto"></audio>
 
   <!-- スクリプト読み込み（キャッシュ無効化バージョン更新） -->
-  <script src="js/assets.js?v=20260928_13"></script>
-  <script src="js/fraction.js?v=20260928_13"></script>
-  <script src="js/tracker.js?v=20260928_13"></script>
-  <script src="js/auth.js?v=20260928_13"></script>
-  <script src="js/sync.js?v=20260928_13"></script>
-  <script src="js/batting.js?v=20260928_13"></script>
-  <script src="js/app.js?v=20260928_13"></script>
+  <script src="js/assets.js?v=20260928_14"></script>
+  <script src="js/fraction.js?v=20260928_14"></script>
+  <script src="js/tracker.js?v=20260928_14"></script>
+  <script src="js/auth.js?v=20260928_14"></script>
+  <script src="js/sync.js?v=20260928_14"></script>
+  <script src="js/batting.js?v=20260928_14"></script>
+  <script src="js/app.js?v=20260928_14"></script>
 </body>
 </html>
