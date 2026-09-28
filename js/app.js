@@ -350,6 +350,9 @@
             } else {
               this.setCoachSpeech(`「ドンマイ！次の5問でリベンジだ！！さあ計算に戻るぞ！！」`);
             }
+            if (this.tracker && typeof this.tracker.start === 'function') {
+              this.tracker.start();
+            }
             this.nextProblem();
           }
         });
@@ -858,7 +861,9 @@
 
           if ((isSessionHit || isAllHit || isTodayHit) && this.battingGame) {
             this.lastBattingTriggerSolved = allCount;
-            this.tracker.stop(); // ドリルのタイマーを一時停止
+            if (this.tracker && typeof this.tracker.pause === 'function') {
+              this.tracker.pause('batting'); // ドリルのタイマーを一時停止
+            }
             console.log(`⚾ ご褒美バッティング発動！ [セッション正解: ${this.sessionSolvedCount}, 通算: ${allCount}, 本日: ${todayCount}]`);
             setTimeout(() => {
               try {
