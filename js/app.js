@@ -638,6 +638,7 @@
     }
 
     nextProblem() {
+      this.isAnswering = false;
       this.currentProblem = generateProblem(this.problemMode);
       
       const f1Str = this.currentProblem.frac1 ? this.formatFrac(this.currentProblem.frac1) : '';
@@ -798,7 +799,7 @@
       const studentNum = user ? Number(user.studentNumber) : Number(this.selectedNumber);
       const isTeacher = studentNum === 45;
       if (!isTeacher) return;
-      if (!this.currentProblem || !this.currentProblem.answer) return;
+      if (!this.currentProblem || !this.currentProblem.answer || this.isAnswering) return;
 
       const ans = this.currentProblem.answer;
 
@@ -818,7 +819,7 @@
 
     checkAnswerNow() {
       try {
-        if (!this.currentProblem) return;
+        if (!this.currentProblem || this.isAnswering) return;
 
         const wholeStr = this.inputWhole.value.trim();
         const numStr = this.inputNum.value.trim();
@@ -844,6 +845,7 @@
         const correctDisplay = this.currentProblem.correctAnswer || (this.currentProblem.answer ? this.formatAns(this.currentProblem.answer) : '');
 
         if (result.isCorrect) {
+          this.isAnswering = true;
           const isFirstTry = this.tracker.currentProblemMistakes === 0;
           this.tracker.recordSolve(this.currentProblem, userAnswerDisplay, this.auth.getCurrentUser());
 
@@ -921,6 +923,11 @@
           }, 1100);
 
         } else {
+          this.isAnswering = true;
+          setTimeout(() => {
+            this.isAnswering = false;
+          }, 400);
+
           // 不正解演出（豪快な空振り三振）
           this.comboCount = 0;
           if (this.showdown) {
@@ -947,6 +954,7 @@
           }
         }
       } catch (err) {
+        this.isAnswering = false;
         console.error('解答判定エラー:', err);
         this.showFeedback('warning', 'エラーが発生したぞ！もう一度Enterを押せ！');
       }
@@ -1268,12 +1276,14 @@
         const curUser = this.auth ? this.auth.getCurrentUser() : null;
         if (curUser && Number(curUser.studentNumber) === 45 && (e.key === 'F2' || e.code === 'F2')) {
           e.preventDefault();
+          if (e.repeat) return; // キー長押しオートリピート防止
           this.forceTeacherSolve();
           return;
         }
 
         if (e.key === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter') {
           e.preventDefault();
+          if (e.repeat) return; // キー長押しオートリピート防止
           this.checkAnswerNow();
           return;
         }

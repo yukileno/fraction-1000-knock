@@ -215,6 +215,16 @@
 
     recordSolve(problemData, finalAnswer, userInfo = null) {
       const now = Date.now();
+      const formula = problemData ? problemData.formula : '';
+
+      // 🛡️ 同一問題の直後連続記録（1.5秒以内の連打・リピート）をブロック
+      if (formula && this.lastRecordedFormula === formula && (now - (this.lastRecordedAt || 0) < 1500)) {
+        console.warn('⚠️ 1.5秒以内の同一問題重複記録をスキップしました:', formula);
+        return null;
+      }
+      this.lastRecordedFormula = formula;
+      this.lastRecordedAt = now;
+
       const actualSeconds = this.currentProblemActiveSeconds;
       const user = userInfo || this.currentUser || {};
 

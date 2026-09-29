@@ -30,34 +30,62 @@ function doPost(e) {
     var data = JSON.parse(rawData);
     var ss = SpreadsheetApp.getActiveSpreadsheet();
 
-    // 1. 学習ログの保存（原本ログ追記に特化して0.2秒で超高速終了！）
+    // 1. 学習ログの保存（重複排除チェック付きで安全・高速に追記！）
     if (data.action === 'save_logs' && data.logs && data.logs.length > 0) {
       var logSheet = getOrCreateLogSheet(ss);
+      var lastRow = logSheet.getLastRow();
+
+      // 直近の既存ログ（最新50行）を取得して重複照合用のセットを作成
+      var recentSet = {};
+      if (lastRow > 1) {
+        var checkCount = Math.min(50, lastRow - 1);
+        var checkStart = lastRow - checkCount + 1;
+        var existingRecent = logSheet.getRange(checkStart, 1, checkCount, 12).getValues();
+        for (var er = 0; er < existingRecent.length; er++) {
+          var rVal = existingRecent[er];
+          // クラス_番号_セッション_問題式_正解
+          var eKey = [rVal[1], rVal[2], rVal[10], String(rVal[4]).replace(/^'/, '').trim(), String(rVal[7]).replace(/^'/, '').trim()].join('|');
+          recentSet[eKey] = true;
+        }
+      }
 
       var rows = [];
+      var seenInPayload = {};
+
       for (var i = 0; i < data.logs.length; i++) {
         var log = data.logs[i];
         var d = new Date(log.timestamp);
         var dateStr = Utilities.formatDate(d, 'Asia/Tokyo', 'yyyy-MM-dd');
+        var formulaStr = String(log.formula || '').trim();
+        var answerStr = String(log.correctAnswer || '').trim();
+        var sId = String(log.sessionId || '').trim();
+
+        // 💥【超重要・同一問題の連打・重複記録を完全防止】
+        var dupKey = [log.className || '', log.studentNumber ? Number(log.studentNumber) : '', sId, formulaStr, answerStr].join('|');
+        if (seenInPayload[dupKey] || recentSet[dupKey]) {
+          // すでに同一ペイロード内またはスプレッドシート直近行に存在する場合は重複としてスキップ！
+          continue;
+        }
+        seenInPayload[dupKey] = true;
 
         rows.push([
           d,                                                  // A: 記録日時
           log.className || '',                               // B: クラス
           log.studentNumber ? Number(log.studentNumber) : '', // C: 出席番号
           log.nickname || log.studentName || '児童',           // D: ニックネーム
-          "'" + (log.formula || ''),                         // E: 問題式 (日付自動変換防止)
+          "'" + formulaStr,                                  // E: 問題式 (日付自動変換防止)
           log.op || '',                                      // F: 演算
           log.category || '',                                // G: 単元分類
-          "'" + (log.correctAnswer || ''),                   // H: 正解 (7/8等が日付になるのを完全防止)
+          "'" + answerStr,                                   // H: 正解 (7/8等が日付になるのを完全防止)
           log.timeSpentSeconds || 0,                         // I: 所要時間(秒)
           log.mistakeCount || 0,                             // J: 間違えた回数
-          log.sessionId || '',                               // K: セッションID
+          sId,                                               // K: セッションID
           "'" + dateStr                                      // L: 日付 (YYYY-MM-DD)
         ]);
       }
 
       if (rows.length > 0) {
-        var lastRow = logSheet.getLastRow();
+        lastRow = logSheet.getLastRow();
         logSheet.getRange(lastRow + 1, 1, rows.length, 12).setValues(rows);
         // A列に明示的に日時書式（時分秒まで）を適用して時間表示を保証！
         logSheet.getRange(lastRow + 1, 1, rows.length, 1).setNumberFormat('yyyy-MM-dd HH:mm:ss');
@@ -65,7 +93,8 @@ function doPost(e) {
 
       return ContentService.createTextOutput(JSON.stringify({
         status: 'success',
-        savedCount: rows.length
+        savedCount: rows.length,
+        skippedDuplicates: data.logs.length - rows.length
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -228,7 +257,8 @@ function doGet(e) {
         var sampleDisplayRows = [];
         var numberFormats = [];
         if (numRows > 0 && numCols > 0) {
-          var startR = Math.max(1, numRows - 10);
+          var limit = (e && e.parameter && e.parameter.limit) ? Math.min(500, Math.max(1, Number(e.parameter.limit))) : 10;
+          var startR = Math.max(1, numRows - limit + 1);
           var countR = numRows - startR + 1;
           var range = sh.getRange(startR, 1, countR, Math.min(15, numCols));
           sampleRows = range.getValues();
@@ -301,6 +331,80 @@ function doGet(e) {
       return ContentService.createTextOutput(JSON.stringify({
         status: 'success',
         deletedRows: deleted
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 8. 重複ログの検出・調査
+    if (action === 'find_duplicates') {
+      var lSheet = ss.getSheetByName('計算ドリル記録');
+      var duplicates = [];
+      if (lSheet) {
+        var lVals = lSheet.getDataRange().getValues();
+        var seenMap = {};
+        for (var i = 1; i < lVals.length; i++) {
+          var r = lVals[i];
+          var key = [r[1], r[2], r[10], r[4], r[7], r[8], r[9]].join('|');
+          if (!seenMap[key]) {
+            seenMap[key] = [i + 1];
+          } else {
+            seenMap[key].push(i + 1);
+            duplicates.push({
+              row: i + 1,
+              originalRow: seenMap[key][0],
+              data: [r[0], r[1], r[2], r[3], r[4], r[7], r[8], r[9], r[10]]
+            });
+          }
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({
+        status: 'success',
+        totalRows: lSheet ? lSheet.getLastRow() : 0,
+        duplicateCount: duplicates.length,
+        sampleDuplicates: duplicates.slice(0, 30)
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 9. 重複ログの自動削除・クリーンアップ（一括配列処理で超高速実行！）
+    if (action === 'deduplicate_logs') {
+      var lSheet = ss.getSheetByName('計算ドリル記録');
+      var deletedRows = 0;
+      if (lSheet) {
+        var lastRow = lSheet.getLastRow();
+        if (lastRow > 1) {
+          var allValues = lSheet.getRange(2, 1, lastRow - 1, 12).getValues();
+          var seenMap = {};
+          var uniqueRows = [];
+
+          for (var i = 0; i < allValues.length; i++) {
+            var r = allValues[i];
+            var key = [r[1], r[2], r[10], String(r[4]).replace(/^'/, '').trim(), String(r[7]).replace(/^'/, '').trim()].join('|');
+            if (!seenMap[key]) {
+              seenMap[key] = true;
+              uniqueRows.push(r);
+            } else {
+              deletedRows++;
+            }
+          }
+
+          if (deletedRows > 0) {
+            // 2行目以降の全データをクリアして、ユニーク行だけを一括書き戻し！
+            lSheet.getRange(2, 1, lastRow - 1, 12).clearContent();
+            lSheet.getRange(2, 1, uniqueRows.length, 12).setValues(uniqueRows);
+            // 余分な行を末尾から一括削除
+            if (lastRow > uniqueRows.length + 1) {
+              var extraRows = lastRow - (uniqueRows.length + 1);
+              lSheet.deleteRows(uniqueRows.length + 2, extraRows);
+            }
+            // A列の書式と列幅を再適用
+            lSheet.getRange('A2:A' + (uniqueRows.length + 1)).setNumberFormat('yyyy-MM-dd HH:mm:ss');
+            lSheet.setColumnWidth(1, 165);
+          }
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({
+        status: 'success',
+        deletedCount: deletedRows,
+        remainingRows: lSheet ? lSheet.getLastRow() : 0
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
