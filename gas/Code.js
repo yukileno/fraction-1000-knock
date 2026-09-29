@@ -254,7 +254,7 @@ function doPost(e) {
 var ADMIN_ACTIONS = [
   'inspect_sheets', 'fix_sheets', 'setup_research', 'setup_daily', 'apply_formulas',
   'clean_test_rows', 'find_duplicates', 'deduplicate_logs', 'inspect_research',
-  'update_research_chart', 'inspect_daily', 'learning_stats'
+  'update_research_chart', 'inspect_daily', 'learning_stats', 'refresh_sheets'
 ];
 
 /**
@@ -581,6 +581,14 @@ function handleGet_(e) {
         status: 'success',
         message: '研究用_学習曲線シートを単元別グラフ機能付きで再構築しました。',
         result: res
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 5-1. 「日別集計」「研究用_学習曲線」の数式だけを最新化（選択値・グラフは保持）
+    if (action === 'refresh_sheets') {
+      return ContentService.createTextOutput(JSON.stringify({
+        status: 'success',
+        result: refreshAnalysisSheets()
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
