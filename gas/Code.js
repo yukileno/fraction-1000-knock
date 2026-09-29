@@ -316,6 +316,12 @@ function doGet(e) {
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
+    // 5-2. 「日別集計」シートの再構築（時間指定対応）
+    if (action === 'setup_daily') {
+      var dailyRes = setupDailySummarySheet();
+      return ContentService.createTextOutput(JSON.stringify(dailyRes)).setMimeType(ContentService.MimeType.JSON);
+    }
+
     // 6. 「児童名簿」シートの全行（E〜J列）に自動計算式を一括強制適用
     if (action === 'apply_formulas') {
       var uSheet = getOrCreateUserSheet(ss);
@@ -458,6 +464,21 @@ function doGet(e) {
       var chartMode = (e && e.parameter && e.parameter.mode) ? e.parameter.mode : 'line';
       var updateRes = updateResearchChart(chartMode);
       return ContentService.createTextOutput(JSON.stringify(updateRes)).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 12. 「日別集計」の現在の内容と数式検証
+    if (action === 'inspect_daily') {
+      var dSheet = ss.getSheetByName('日別集計');
+      if (!dSheet) return ContentService.createTextOutput(JSON.stringify({ status: 'not_found' })).setMimeType(ContentService.MimeType.JSON);
+      return ContentService.createTextOutput(JSON.stringify({
+        status: 'success',
+        row1: dSheet.getRange('A1:K1').getValues()[0],
+        row1Formulas: dSheet.getRange('A1:K1').getFormulas()[0],
+        row2: dSheet.getRange('A2:H2').getValues()[0],
+        row4: dSheet.getRange('A4:H4').getValues()[0],
+        row4Formulas: dSheet.getRange('A4:H4').getFormulas()[0],
+        avgRow: dSheet.getRange('A49:H49').getValues()[0]
+      })).setMimeType(ContentService.MimeType.JSON);
     }
 
     // デフォルト: 稼働ステータス確認
@@ -764,6 +785,7 @@ function getOrCreateUserSheet(ss) {
 
 /**
  * 📊 「日別集計」シートの作成・フォーミュラ設定
+ * - 集計日付 ＆ クラス ＆ 開始時刻〜終了時刻（何時から何時まで）の絞り込み集計に完全対応！
  */
 function setupDailySummarySheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -775,22 +797,73 @@ function setupDailySummarySheet() {
     sheet.clear();
   }
 
-  // 1. コントロール部 (日付選択 ＆ クラス選択)
-  sheet.getRange('A1').setValue('📅 集計日付:').setFontWeight('bold');
+  // 1. コントロール部 (1行目: 日付・クラス・開始時刻・終了時刻)
+  // A1-B1: 集計日付
+  sheet.getRange('A1').setValue('📅 集計日付:').setFontWeight('bold').setBackground('#f1f5f9');
   var todayStr = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
   sheet.getRange('B1').setValue(todayStr).setNumberFormat('@').setBackground('#fef3c7').setFontWeight('bold');
 
-  sheet.getRange('C1').setValue('🏫 クラス:').setFontWeight('bold');
+  // C1-D1: クラス
+  sheet.getRange('C1').setValue('🏫 クラス:').setFontWeight('bold').setBackground('#f1f5f9');
   sheet.getRange('D1').setValue('5年1組').setBackground('#fef3c7').setFontWeight('bold');
-
   var classRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(['5年1組', '5年2組', '5年3組', '5年4組', '5年5組', '5年6組'], true)
     .build();
   sheet.getRange('D1').setDataValidation(classRule);
 
-  sheet.getRange('E1').setValue('※黄色いセル（日付・クラス）を変更すると自動で再集計されます').setFontColor('#64748b').setFontSize(9);
+  // E1-F1: 開始時刻（何時から）
+  sheet.getRange('E1').setValue('⏰ 開始時刻:').setFontWeight('bold').setBackground('#f1f5f9');
+  sheet.getRange('F1').setValue('').setBackground('#fef3c7').setFontWeight('bold').setNumberFormat('@');
 
-  // 2. 表ヘッダー
+  // G1-H1: 終了時刻（何時まで）
+  sheet.getRange('G1').setValue('⏰ 終了時刻:').setFontWeight('bold').setBackground('#f1f5f9');
+  sheet.getRange('H1').setValue('').setBackground('#fef3c7').setFontWeight('bold').setNumberFormat('@');
+
+  // 時刻入力用プルダウン候補（自由手入力も可能）
+  var timeCandidates = [
+    '',
+    '08:00', '08:15', '08:30', '08:45',
+    '09:00', '09:15', '09:30', '09:45',
+    '10:00', '10:15', '10:30', '10:45',
+    '11:00', '11:15', '11:30', '11:45',
+    '12:00', '12:15', '12:30', '12:45',
+    '13:00', '13:15', '13:30', '13:45',
+    '14:00', '14:15', '14:30', '14:45',
+    '15:00', '15:15', '15:30', '15:45',
+    '16:00', '16:15', '16:30', '17:00'
+  ];
+  var timeRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(timeCandidates, false)
+    .build();
+  sheet.getRange('F1').setDataValidation(timeRule);
+  sheet.getRange('H1').setDataValidation(timeRule);
+
+  // J1: 判定用・開始日時シリアル値
+  // 日付 + 開始時刻(未指定なら00:00:00)
+  sheet.getRange('J1').setFormula(
+    '=IF(ISBLANK($B$1), TODAY(), IF(ISNUMBER($B$1), INT($B$1), DATEVALUE($B$1))) + IF(ISBLANK($F$1), 0, IF(ISNUMBER($F$1), $F$1 - INT($F$1), TIMEVALUE($F$1)))'
+  ).setNumberFormat('yyyy-MM-dd HH:mm:ss').setFontColor('#94a3b8');
+
+  // K1: 判定用・終了日時シリアル値
+  // 日付 + 終了時刻(未指定なら23:59:59)
+  sheet.getRange('K1').setFormula(
+    '=IF(ISBLANK($B$1), TODAY(), IF(ISNUMBER($B$1), INT($B$1), DATEVALUE($B$1))) + IF(ISBLANK($H$1), TIME(23,59,59), IF(ISNUMBER($H$1), $H$1 - INT($H$1), TIMEVALUE($H$1)))'
+  ).setNumberFormat('yyyy-MM-dd HH:mm:ss').setFontColor('#94a3b8');
+
+  // 2行目: 状態サマリーバー
+  sheet.getRange('A2').setValue('🎯 集計範囲:').setFontWeight('bold').setBackground('#f8fafc');
+  sheet.getRange('B2').setFormula(
+    '=IF(AND(ISBLANK(F1), ISBLANK(H1)), "【終日】 00:00 〜 23:59 の全ログ", TEXT(J1, "yyyy/mm/dd hh:mm") & " 〜 " & TEXT(K1, "hh:mm") & " のログ")'
+  ).setFontWeight('bold').setFontColor('#1e40af');
+
+  sheet.getRange('E2').setValue('※時刻を空欄にすると【終日】集計になります（例: 10:45 〜 11:30）')
+    .setFontColor('#64748b').setFontSize(9);
+
+  // 枠線
+  sheet.getRange('A1:H1').setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
+  sheet.getRange('A2:H2').setBorder(true, true, true, true, false, false, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
+
+  // 3. 表ヘッダー
   var headers = [
     '出席番号', 'ニックネーム', '解いた問題数', '学習時間(分)',
     '平均解答時間(秒)', '間違えた回数(合計)', '1発正解数', '1発正解率'
@@ -799,7 +872,7 @@ function setupDailySummarySheet() {
     .setBackground('#1e40af').setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
   sheet.setFrozenRows(3);
 
-  // 3. 各出席番号（1〜45番）の数式設定
+  // 4. 各出席番号（1〜45番）の数式設定（開始日時 J1 〜 終了日時 K1 で範囲フィルタ）
   var formulaRows = [];
   for (var num = 1; num <= 45; num++) {
     var row = num + 3; // 行番号 (4〜48)
@@ -808,22 +881,22 @@ function setupDailySummarySheet() {
       // B列: ニックネーム
       '=IFERROR(INDEX(児童名簿!$D:$D, MATCH(1, (児童名簿!$B:$B=$D$1)*(児童名簿!$C:$C=' + num + '), 0)), "-")',
       // C列: 解いた問題数
-      '=COUNTIFS(計算ドリル記録!$L:$L, $B$1, 計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + ')',
+      '=COUNTIFS(計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + ', 計算ドリル記録!$A:$A, ">="&$J$1, 計算ドリル記録!$A:$A, "<="&$K$1)',
       // D列: 学習時間(分)
-      '=IF(C' + row + '=0, 0, ROUND(SUMIFS(計算ドリル記録!$I:$I, 計算ドリル記録!$L:$L, $B$1, 計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + ')/60, 1))',
+      '=IF(C' + row + '=0, 0, ROUND(SUMIFS(計算ドリル記録!$I:$I, 計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + ', 計算ドリル記録!$A:$A, ">="&$J$1, 計算ドリル記録!$A:$A, "<="&$K$1)/60, 1))',
       // E列: 平均解答時間(秒)
-      '=IF(C' + row + '=0, "-", ROUND(SUMIFS(計算ドリル記録!$I:$I, 計算ドリル記録!$L:$L, $B$1, 計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + ')/C' + row + ', 0))',
+      '=IF(C' + row + '=0, "-", ROUND(SUMIFS(計算ドリル記録!$I:$I, 計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + ', 計算ドリル記録!$A:$A, ">="&$J$1, 計算ドリル記録!$A:$A, "<="&$K$1)/C' + row + ', 0))',
       // F列: 間違えた回数
-      '=IF(C' + row + '=0, "-", SUMIFS(計算ドリル記録!$J:$J, 計算ドリル記録!$L:$L, $B$1, 計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + '))',
+      '=IF(C' + row + '=0, "-", SUMIFS(計算ドリル記録!$J:$J, 計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + ', 計算ドリル記録!$A:$A, ">="&$J$1, 計算ドリル記録!$A:$A, "<="&$K$1))',
       // G列: 1発正解数
-      '=IF(C' + row + '=0, "-", COUNTIFS(計算ドリル記録!$L:$L, $B$1, 計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + ', 計算ドリル記録!$J:$J, 0))',
+      '=IF(C' + row + '=0, "-", COUNTIFS(計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + ', 計算ドリル記録!$A:$A, ">="&$J$1, 計算ドリル記録!$A:$A, "<="&$K$1, 計算ドリル記録!$J:$J, 0))',
       // H列: 1発正解率
       '=IF(C' + row + '=0, "-", TEXT(G' + row + '/C' + row + ', "0.0%"))'
     ]);
   }
   sheet.getRange(4, 1, 45, headers.length).setValues(formulaRows);
 
-  // 4. クラス平均行 (49行目)
+  // 5. クラス平均行 (49行目)
   var avgRow = [
     '【クラス平均】',
     '-',
@@ -837,6 +910,7 @@ function setupDailySummarySheet() {
   sheet.getRange(49, 1, 1, headers.length).setValues([avgRow])
     .setBackground('#dbeafe').setFontWeight('bold');
 
+  // 列幅設定
   sheet.setColumnWidth(1, 80);
   sheet.setColumnWidth(2, 130);
   sheet.setColumnWidth(3, 110);
@@ -846,6 +920,11 @@ function setupDailySummarySheet() {
   sheet.setColumnWidth(7, 100);
   sheet.setColumnWidth(8, 110);
   sheet.getRange(4, 1, 46, headers.length).setHorizontalAlignment('center');
+
+  // J列・K列（内部判定用）は非表示にして画面をすっきり整理
+  sheet.hideColumns(10, 2);
+
+  return { status: 'success', message: '日別集計シートを時間指定（何時から何時まで）対応版で再構築しました。' };
 }
 
 /**
