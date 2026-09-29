@@ -27,6 +27,7 @@
 
       this.activeSeconds = 0;
       this.isRunning = false;
+      this.wantsRunning = false; // アプリ側が計測を望んでいるか（ログイン前・ミニゲーム中は false）
       this.isIdle = false;
       this.isTabHidden = false;
       this.isBlurred = false;
@@ -111,9 +112,7 @@
           this.pause('tab_hidden');
         } else {
           this.isTabHidden = false;
-          if (!this.isIdle && !this.isBlurred) {
-            this.start();
-          }
+          this.resumeIfWanted();
         }
       });
 
@@ -126,14 +125,22 @@
 
         window.addEventListener('focus', () => {
           this.isBlurred = false;
-          if (!this.isTabHidden && !this.isIdle) {
-            this.start();
-          }
+          this.resumeIfWanted();
         });
       }
     }
 
+    // アプリ側から計測を開始（ログイン時・ミニゲーム終了時など）
     start() {
+      this.wantsRunning = true;
+      this.idleTimerSeconds = 0;
+      this.resumeIfWanted();
+    }
+
+    // タブ復帰・フォーカス復帰・放置解除時の再開。
+    // ログイン前やミニゲーム中など、アプリ側が意図的に止めている間は再開しない
+    resumeIfWanted() {
+      if (!this.wantsRunning || this.isTabHidden || this.isBlurred || this.isIdle) return;
       if (this.intervalId) return;
       this.isRunning = true;
 
@@ -161,6 +168,10 @@
     }
 
     pause(reason = 'manual') {
+      // タブ非表示・フォーカス離脱・放置は一時停止（復帰で自動再開）。それ以外はアプリ側の明示停止
+      if (reason !== 'tab_hidden' && reason !== 'window_blur' && reason !== 'idle') {
+        this.wantsRunning = false;
+      }
       this.isRunning = false;
       if (this.intervalId) {
         clearInterval(this.intervalId);
@@ -187,9 +198,7 @@
       this.isIdle = false;
       this.idleTimerSeconds = 0;
       this.onIdleStateChange(false);
-      if (!this.isTabHidden && !this.isBlurred) {
-        this.start();
-      }
+      this.resumeIfWanted();
     }
 
     startNewProblem(problemData) {

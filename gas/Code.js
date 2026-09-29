@@ -13,6 +13,7 @@ function onOpen() {
     .addItem('🛠️ 「計算ドリル記録」のヘッダー＆正解日付化バグを一括修復', 'menuFixLogSheet')
     .addItem('⚡ 「児童名簿」に自動計算式を一括設定（高速化・推奨）', 'applyUserSheetFormulas')
     .addItem('👥 「児童名簿」の累計実績を全再集計', 'recalculateAllUserSummaries')
+    .addItem('🧹 「計算ドリル記録」の重複ログを削除', 'menuDeduplicateLogs')
     .addItem('📊 「日別集計」シートを再構築', 'setupDailySummarySheet')
     .addItem('📈 「研究用_学習曲線」シートを再構築', 'setupResearchSheet')
     .addSeparator()
@@ -29,6 +30,60 @@ function menuUpdateChartLine() {
 function menuUpdateChartCombo() {
   var res = updateResearchChart('combo');
   SpreadsheetApp.getUi().alert('グラフを「左右2軸（折れ線＋棒グラフ）」に更新しました！\n左軸：所要時間(秒) [折れ線]\n右軸：間違えた回数(回) [赤棒グラフ]');
+}
+
+function menuDeduplicateLogs() {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(25000);
+  try {
+    var res = deduplicateLogSheet(SpreadsheetApp.getActiveSpreadsheet());
+    SpreadsheetApp.getUi().alert('重複ログの削除が完了しました。\n\n削除: ' + res.deletedCount + ' 行\n残り: ' + res.remainingRows + ' 行');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * 「計算ドリル記録」の重複行を削除する（呼び出し側で LockService のロックを取得しておくこと）
+ * ログIDがある行はIDが同じものだけを重複とみなす（同じ問題を解き直した正当な記録は残す）
+ */
+function deduplicateLogSheet(ss) {
+  var lSheet = ss.getSheetByName('計算ドリル記録');
+  var deletedRows = 0;
+  if (lSheet) {
+    var lastRow = lSheet.getLastRow();
+    if (lastRow > 1) {
+      var allValues = lSheet.getRange(2, 1, lastRow - 1, LOG_COLS).getValues();
+      var seenMap = {};
+      var uniqueRows = [];
+
+      for (var i = 0; i < allValues.length; i++) {
+        var r = allValues[i];
+        var key = r[12] ? 'id:' + r[12] : legacyLogKey(r[1], r[2], r[10], r[4], r[7]);
+        if (!seenMap[key]) {
+          seenMap[key] = true;
+          uniqueRows.push(r);
+        } else {
+          deletedRows++;
+        }
+      }
+
+      if (deletedRows > 0) {
+        // 2行目以降の全データをクリアして、ユニーク行だけを一括書き戻し！
+        lSheet.getRange(2, 1, lastRow - 1, LOG_COLS).clearContent();
+        lSheet.getRange(2, 1, uniqueRows.length, LOG_COLS).setValues(uniqueRows);
+        // 余分な行を末尾から一括削除
+        if (lastRow > uniqueRows.length + 1) {
+          var extraRows = lastRow - (uniqueRows.length + 1);
+          lSheet.deleteRows(uniqueRows.length + 2, extraRows);
+        }
+        // A列の書式と列幅を再適用
+        lSheet.getRange('A2:A' + (uniqueRows.length + 1)).setNumberFormat('yyyy-MM-dd HH:mm:ss');
+        lSheet.setColumnWidth(1, 165);
+      }
+    }
+  }
+  return { deletedCount: deletedRows, remainingRows: lSheet ? lSheet.getLastRow() : 0 };
 }
 
 function menuFixLogSheet() {
@@ -196,7 +251,56 @@ function doPost(e) {
   }
 }
 
+// 児童用アプリが使う読み取り専用の action 以外（調査・修復・削除系）は管理者専用
+var ADMIN_ACTIONS = [
+  'inspect_sheets', 'fix_sheets', 'setup_research', 'setup_daily', 'apply_formulas',
+  'clean_test_rows', 'find_duplicates', 'deduplicate_logs', 'inspect_research',
+  'update_research_chart', 'inspect_daily'
+];
+
+/**
+ * 管理者リクエストの判定。
+ * スクリプトプロパティ ADMIN_TOKEN（GASエディタ > プロジェクトの設定 > スクリプト プロパティ）に
+ * 推測されにくい文字列を設定し、?action=...&token=<その文字列> で呼び出す。
+ * ADMIN_TOKEN が未設定の間は管理者用 action はすべて拒否される（スプレッドシートのメニューからは実行可能）。
+ */
+function isAdminRequest_(e) {
+  var token = PropertiesService.getScriptProperties().getProperty('ADMIN_TOKEN');
+  var given = (e && e.parameter && e.parameter.token) ? String(e.parameter.token) : '';
+  return !!token && given === token;
+}
+
 function doGet(e) {
+  var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : 'status';
+  if (ADMIN_ACTIONS.indexOf(action) === -1) {
+    return handleGet_(e);
+  }
+
+  if (!isAdminRequest_(e)) {
+    return ContentService.createTextOutput(JSON.stringify({
+      status: 'forbidden',
+      message: 'この操作には管理者トークンが必要です。'
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 修復・削除系は児童の保存(doPost)と同時に走るとデータを壊すため、同じロックで直列化する
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(25000);
+  } catch (lockErr) {
+    return ContentService.createTextOutput(JSON.stringify({
+      status: 'error',
+      message: 'ロックを取得できませんでした。時間をおいて再実行してください。'
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+  try {
+    return handleGet_(e);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function handleGet_(e) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : 'status';
@@ -416,46 +520,11 @@ function doGet(e) {
 
     // 9. 重複ログの自動削除・クリーンアップ（一括配列処理で超高速実行！）
     if (action === 'deduplicate_logs') {
-      var lSheet = ss.getSheetByName('計算ドリル記録');
-      var deletedRows = 0;
-      if (lSheet) {
-        var lastRow = lSheet.getLastRow();
-        if (lastRow > 1) {
-          var allValues = lSheet.getRange(2, 1, lastRow - 1, LOG_COLS).getValues();
-          var seenMap = {};
-          var uniqueRows = [];
-
-          for (var i = 0; i < allValues.length; i++) {
-            var r = allValues[i];
-            // ログIDがある行はIDが同じものだけを重複とみなす（同じ問題を解き直した正当な記録は残す）
-            var key = r[12] ? 'id:' + r[12] : legacyLogKey(r[1], r[2], r[10], r[4], r[7]);
-            if (!seenMap[key]) {
-              seenMap[key] = true;
-              uniqueRows.push(r);
-            } else {
-              deletedRows++;
-            }
-          }
-
-          if (deletedRows > 0) {
-            // 2行目以降の全データをクリアして、ユニーク行だけを一括書き戻し！
-            lSheet.getRange(2, 1, lastRow - 1, LOG_COLS).clearContent();
-            lSheet.getRange(2, 1, uniqueRows.length, LOG_COLS).setValues(uniqueRows);
-            // 余分な行を末尾から一括削除
-            if (lastRow > uniqueRows.length + 1) {
-              var extraRows = lastRow - (uniqueRows.length + 1);
-              lSheet.deleteRows(uniqueRows.length + 2, extraRows);
-            }
-            // A列の書式と列幅を再適用
-            lSheet.getRange('A2:A' + (uniqueRows.length + 1)).setNumberFormat('yyyy-MM-dd HH:mm:ss');
-            lSheet.setColumnWidth(1, 165);
-          }
-        }
-      }
+      var dedupRes = deduplicateLogSheet(ss);
       return ContentService.createTextOutput(JSON.stringify({
         status: 'success',
-        deletedCount: deletedRows,
-        remainingRows: lSheet ? lSheet.getLastRow() : 0
+        deletedCount: dedupRes.deletedCount,
+        remainingRows: dedupRes.remainingRows
       })).setMimeType(ContentService.MimeType.JSON);
     }
 

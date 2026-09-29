@@ -602,6 +602,7 @@
       this.sessionSolvedCount = 0;
       this.solvedSinceLastBatting = 0;
       this.lastBattingTriggerSolved = -1;
+      this.lastKnocksDone = undefined; // 1000本達成判定の基準をユーザーごとにリセット
 
       // ⚡ 出席番号45番（教師用アカウント）のときのみ強制正解ボタンを表示
       const isTeacher = user && Number(user.studentNumber) === 45;
@@ -649,7 +650,7 @@
 
     nextProblem() {
       this.isAnswering = false;
-      this.currentProblem = generateProblem(this.problemMode);
+      this.currentProblem = generateProblem({ mode: this.problemMode });
       
       const f1Str = this.currentProblem.frac1 ? this.formatFrac(this.currentProblem.frac1) : '';
       const f2Str = this.currentProblem.frac2 ? this.formatFrac(this.currentProblem.frac2) : '';
@@ -897,14 +898,9 @@
           this.showFeedback('correct', `⚾ カキーン！！ 正解だ！！ (答え: ${correctDisplay})`);
           this.updateGrowthDashboard();
 
-          // 1000本達成判定
+          // 1000本達成判定は updateGrowthDashboard() 内で行う
           const user = this.auth.getCurrentUser();
           const stats = this.tracker.getStatsComparison(user);
-          if (stats && stats.knocks && stats.knocks.done === 1000) {
-            setTimeout(() => {
-              this.goalModal.classList.add('active');
-            }, 800);
-          }
 
           // 🌟 5問に1回、ご褒美バッティングミニゲーム（1球入魂）へ突入！
           this.sessionSolvedCount = (this.sessionSolvedCount || 0) + 1;
@@ -1018,6 +1014,17 @@
       const user = this.auth.getCurrentUser();
       const stats = this.tracker.getStatsComparison(user);
       const k = stats.knocks;
+
+      // 🏆 1000本達成：解答時・同期後のどちらで1000を越えても（999→1001 のような飛びも含め）一度だけ表示。
+      // 直前の値がスプレッドシートの累計を反映していない（名簿未取得）場合は、取得による増加を達成と誤認しない
+      const hasSummary = Boolean(user && user.summary && user.summary.totalSolved !== undefined && user.summary.totalSolved !== null);
+      if (this.lastKnocksDone !== undefined && this.lastKnocksHadSummary && this.lastKnocksDone < k.target && k.done >= k.target) {
+        setTimeout(() => {
+          this.goalModal.classList.add('active');
+        }, 800);
+      }
+      this.lastKnocksDone = k.done;
+      this.lastKnocksHadSummary = hasSummary;
 
       // 1000本ノックスコアボード
       if (k.isCompleted) {
@@ -1142,8 +1149,13 @@
           this.inputNickname.focus();
           return;
         }
+        // 既に登録済みの児童の「名前の修正」は新規入部扱いにしない（今日の記録を消さない）
+        const alreadyRegistered = this.auth.checkStudent(this.selectedClass, this.selectedNumber).exists;
         const user = this.auth.loginWithNickname(this.selectedClass, this.selectedNumber, nick);
-        this.onLoginComplete(user, true);
+        this.onLoginComplete(user, !alreadyRegistered);
+        if (alreadyRegistered) {
+          this.sync.syncUser(user); // 修正後の名前をスプレッドシートの名簿へ反映
+        }
       });
 
       // ステップ2-B: 「クラス・番号を選び直す」
