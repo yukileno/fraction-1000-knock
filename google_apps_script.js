@@ -15,7 +15,20 @@ function onOpen() {
     .addItem('👥 「児童名簿」の累計実績を全再集計', 'recalculateAllUserSummaries')
     .addItem('📊 「日別集計」シートを再構築', 'setupDailySummarySheet')
     .addItem('📈 「研究用_学習曲線」シートを再構築', 'setupResearchSheet')
+    .addSeparator()
+    .addItem('📈 グラフを「左右2軸（折れ線＋折れ線）」に変更', 'menuUpdateChartLine')
+    .addItem('📊 グラフを「左右2軸（折れ線＋赤棒グラフ）」に変更', 'menuUpdateChartCombo')
     .addToUi();
+}
+
+function menuUpdateChartLine() {
+  var res = updateResearchChart('line');
+  SpreadsheetApp.getUi().alert('グラフを「左右2軸（折れ線＋折れ線）」に更新しました！\n左軸：所要時間(秒)\n右軸：間違えた回数(回)');
+}
+
+function menuUpdateChartCombo() {
+  var res = updateResearchChart('combo');
+  SpreadsheetApp.getUi().alert('グラフを「左右2軸（折れ線＋棒グラフ）」に更新しました！\n左軸：所要時間(秒) [折れ線]\n右軸：間違えた回数(回) [赤棒グラフ]');
 }
 
 function menuFixLogSheet() {
@@ -406,6 +419,45 @@ function doGet(e) {
         deletedCount: deletedRows,
         remainingRows: lSheet ? lSheet.getLastRow() : 0
       })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 10. 「研究用_学習曲線」の現在の状態とグラフ調査
+    if (action === 'inspect_research') {
+      var rSheet = ss.getSheetByName('研究用_学習曲線');
+      if (!rSheet) {
+        return ContentService.createTextOutput(JSON.stringify({ status: 'not_found' })).setMimeType(ContentService.MimeType.JSON);
+      }
+      var charts = rSheet.getCharts();
+      var chartDetails = [];
+      for (var ci = 0; ci < charts.length; ci++) {
+        var c = charts[ci];
+        var ranges = [];
+        var cRanges = c.getRanges();
+        for (var ri = 0; ri < cRanges.length; ri++) {
+          ranges.push(cRanges[ri].getA1Notation());
+        }
+        chartDetails.push({
+          ranges: ranges,
+          optionsObj: JSON.parse(JSON.stringify(c.getOptions() || {}))
+        });
+      }
+      return ContentService.createTextOutput(JSON.stringify({
+        status: 'success',
+        chartCount: charts.length,
+        charts: chartDetails,
+        rowCount: rSheet.getLastRow(),
+        b1: rSheet.getRange('B1').getValue(),
+        d1: rSheet.getRange('D1').getValue(),
+        f1: rSheet.getRange('F1').getValue(),
+        h1: rSheet.getRange('H1').getValue()
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 11. 「研究用_学習曲線」のグラフを2軸に更新
+    if (action === 'update_research_chart') {
+      var chartMode = (e && e.parameter && e.parameter.mode) ? e.parameter.mode : 'line';
+      var updateRes = updateResearchChart(chartMode);
+      return ContentService.createTextOutput(JSON.stringify(updateRes)).setMimeType(ContentService.MimeType.JSON);
     }
 
     // デフォルト: 稼働ステータス確認
@@ -927,4 +979,76 @@ function setupResearchSheet() {
   sheet.insertChart(chart);
 
   return { status: 'success', sheet: sheetName };
+}
+
+/**
+ * 📈 「研究用_学習曲線」のグラフを左右2軸グラフに更新
+ * @param {string} mode 'line'（両方折れ線）または 'combo'（折れ線＋棒グラフ）
+ */
+function updateResearchChart(mode) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('研究用_学習曲線');
+  if (!sheet) return { status: 'error', message: '「研究用_学習曲線」シートが見つかりません。' };
+
+  var isLine = (mode === 'line');
+
+  // 既存のグラフを全て削除
+  var charts = sheet.getCharts();
+  for (var i = 0; i < charts.length; i++) {
+    sheet.removeChart(charts[i]);
+  }
+
+  // 左右2軸グラフを新規作成
+  var chartBuilder = sheet.newChart()
+    .asComboChart()
+    .addRange(sheet.getRange('A3:A100')) // 横軸: 解いた問題の順番
+    .addRange(sheet.getRange('F3:F100')) // 系列1: 所要時間(秒) -> 左軸
+    .addRange(sheet.getRange('G3:G100')) // 系列2: 間違えた回数 -> 右軸
+    .setPosition(4, 10, 0, 0)           // J4セルに配置
+    .setOption('title', '📈 学習曲線 ＆ エラー推移グラフ（問題ごとの解答秒数 ＆ ミス回数）')
+    .setOption('titleTextStyle', { fontSize: 13, bold: true, color: '#0f172a' })
+    .setOption('series', {
+      0: {
+        type: 'line',
+        targetAxisIndex: 0,
+        color: '#2563eb',
+        lineWidth: 3,
+        pointSize: 5,
+        labelInLegend: '所要時間 (秒) [左軸]'
+      },
+      1: {
+        type: isLine ? 'line' : 'bars',
+        targetAxisIndex: 1,
+        color: '#ef4444',
+        lineWidth: isLine ? 3 : 0,
+        pointSize: isLine ? 6 : 0,
+        labelInLegend: '間違えた回数 (ミス) [右軸]'
+      }
+    })
+    .setOption('vAxes', {
+      0: {
+        title: '所要時間 (秒)',
+        minValue: 0,
+        titleTextStyle: { color: '#2563eb', bold: true }
+      },
+      1: {
+        title: '間違えた回数 (回)',
+        minValue: 0,
+        titleTextStyle: { color: '#ef4444', bold: true },
+        format: '#,##0'
+      }
+    })
+    .setOption('hAxis', { title: '解いた問題の順番', slantedText: true, slantedTextAngle: 45 })
+    .setOption('legend', { position: 'top' })
+    .setOption('width', 780)
+    .setOption('height', 420);
+
+  var newChart = chartBuilder.build();
+  sheet.insertChart(newChart);
+
+  return {
+    status: 'success',
+    mode: isLine ? '2軸折れ線' : '2軸複合(折れ線+棒グラフ)',
+    message: '「研究用_学習曲線」のグラフを左右2軸に更新しました！'
+  };
 }
