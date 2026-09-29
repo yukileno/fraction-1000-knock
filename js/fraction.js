@@ -249,6 +249,123 @@
     return buildProblemData(f1, f2, '+', false, 999);
   }
 
+  // =========================================================================
+  // スモールステップ出題（段階0〜8）と計測球
+  // =========================================================================
+  const MAX_LEVEL = 8;
+  const LEVEL_LABELS = [
+    '同分母・答えが1より小さい',
+    '同分母・答えが1以上/帯分数',
+    '異分母・真分数・約分なし',
+    '異分母・真分数・約分あり',
+    '異分母・答えが1をこえる',
+    '帯分数・繰り上がり下がりなし・約分なし',
+    '帯分数・約分あり',
+    '帯分数・繰り上がり下がりあり',
+    'ミックス（全単元）'
+  ];
+
+  // 分母 d と互いに素な分子（＝最初から約分済みの分数）を選ぶ
+  function reducedNumerator(d, min = 1, max = d - 1) {
+    const cands = [];
+    for (let n = min; n <= max; n++) if (gcd(n, d) === 1) cands.push(n);
+    return cands.length ? choice(cands) : null;
+  }
+
+  // 引き算は大きい方を先にして問題データを組み立てる
+  function buildOrdered(f1, f2, op) {
+    if (op === '-' && f1.valueOf() < f2.valueOf()) { const t = f1; f1 = f2; f2 = t; }
+    if (op === '-' && f1.valueOf() === f2.valueOf()) return null;
+    return buildProblemData(f1, f2, op, false, 999);
+  }
+
+  // 段階0・1: 同分母（通分なし・小学4年生レベル）
+  function generateSameDenominator(level) {
+    for (let i = 0; i < 300; i++) {
+      const op = Math.random() < 0.5 ? '+' : '-';
+      const d = getRandomInt(3, 10);
+      let w1 = 0, w2 = 0, n1, n2;
+      if (level === 0) {
+        n1 = getRandomInt(1, d - 1);
+        n2 = getRandomInt(1, d - 1);
+        if (op === '+' && n1 + n2 >= d) continue;         // 答えは1より小さく
+      } else if (Math.random() < 0.5) {
+        if (op === '-') continue;
+        n1 = getRandomInt(1, d - 1);
+        n2 = getRandomInt(1, d - 1);
+        if (n1 + n2 <= d) continue;                        // 答えが1をこえる（帯分数に直す）
+      } else {
+        w1 = getRandomInt(1, 2);
+        w2 = op === '-' ? getRandomInt(0, w1) : getRandomInt(0, 1);
+        n1 = getRandomInt(1, d - 1);
+        n2 = getRandomInt(1, d - 1);
+        if (op === '+' && n1 + n2 >= d) continue;          // 繰り上がりなし
+        if (op === '-' && n1 <= n2) continue;              // 繰り下がりなし
+      }
+      const prob = buildOrdered(new Fraction(w1, n1, d), new Fraction(w2, n2, d), op);
+      if (!prob || prob.canReduce) continue;               // 答えに約分が出ないもの
+      prob.category = `同分母の${op === '+' ? '足し算' : '引き算'}${level === 1 ? '（1以上・帯分数）' : ''}`;
+      return prob;
+    }
+    return buildProblemData(new Fraction(0, 1, 5), new Fraction(0, 2, 5), '+', false, 999);
+  }
+
+  // 段階2〜7と計測球: 異分母。条件 accept(prob, w1, w2) を満たすまで生成
+  function generateDifferentDenominator(wholePattern, accept) {
+    for (let i = 0; i < 2000; i++) {
+      const op = Math.random() < 0.5 ? '+' : '-';
+      const pair = choice(DENOMINATOR_PAIRS);
+      const swap = Math.random() < 0.5;
+      const d1 = swap ? pair[0] : pair[1];
+      const d2 = swap ? pair[1] : pair[0];
+      const n1 = reducedNumerator(d1);
+      const n2 = reducedNumerator(d2);
+      if (!n1 || !n2) continue;
+      const [w1, w2] = wholePattern();
+      const prob = buildOrdered(new Fraction(w1, n1, d1), new Fraction(w2, n2, d2), op);
+      if (prob && accept(prob)) return prob;
+    }
+    return null;
+  }
+
+  const noWhole = () => [0, 0];
+  const someWhole = () => choice([[getRandomInt(1, 2), 0], [0, getRandomInt(1, 2)], [getRandomInt(1, 2), getRandomInt(1, 2)]]);
+  const hasMixed = (p) => p.frac1.whole > 0 || p.frac2.whole > 0;
+
+  function generateLeveledProblem(level) {
+    level = Math.max(0, Math.min(MAX_LEVEL, Number(level) || 0));
+    let prob = null;
+    if (level <= 1) {
+      prob = generateSameDenominator(level);
+    } else if (level === 2) {
+      prob = generateDifferentDenominator(noWhole, p => !p.canReduce && p.answer.whole === 0);
+    } else if (level === 3) {
+      prob = generateDifferentDenominator(noWhole, p => p.canReduce && p.answer.whole === 0);
+    } else if (level === 4) {
+      prob = generateDifferentDenominator(noWhole, p => p.op === '+' && p.answer.whole >= 1);
+    } else if (level === 5) {
+      prob = generateDifferentDenominator(someWhole, p => hasMixed(p) && !p.hasRegrouping && !p.canReduce);
+    } else if (level === 6) {
+      prob = generateDifferentDenominator(someWhole, p => hasMixed(p) && !p.hasRegrouping && p.canReduce);
+    } else if (level === 7) {
+      prob = generateDifferentDenominator(someWhole, p => hasMixed(p) && p.hasRegrouping);
+    }
+    if (!prob) prob = generateProblem({ mode: 'mix' }); // 段階8、または生成できなかった場合
+    prob.level = level;
+    prob.kind = 'practice';
+    return prob;
+  }
+
+  // 計測球: 全員共通・難しさ固定（帯分数の引き算・約分あり・繰り下がりなし。第1期の1発正解率 約67%）
+  function generateProbeProblem() {
+    const prob = generateDifferentDenominator(
+      () => [getRandomInt(1, 3), getRandomInt(0, 1)],
+      p => p.op === '-' && p.frac1.whole > 0 && !p.hasRegrouping && p.canReduce
+    ) || generateProblem({ mode: 'mix' });
+    prob.kind = 'probe';
+    return prob;
+  }
+
   function checkAnswer(inputOrProblem, problemOrWhole, numArg, denArg) {
     let input = {};
     let problemData = null;
@@ -389,6 +506,10 @@
     lcm,
     Fraction,
     generateProblem,
+    generateLeveledProblem,
+    generateProbeProblem,
+    MAX_LEVEL,
+    LEVEL_LABELS,
     checkAnswer
   };
 });

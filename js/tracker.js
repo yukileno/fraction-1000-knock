@@ -235,7 +235,8 @@
       this.loadTodaySession();
     }
 
-    recordSolve(problemData, finalAnswer, userInfo = null) {
+    // revealed: 規定回数ミスして答えを表示して次へ進んだ場合 true
+    recordSolve(problemData, finalAnswer, userInfo = null, revealed = false) {
       const now = Date.now();
       const formula = problemData ? problemData.formula : '';
 
@@ -262,8 +263,11 @@
           subCategory: problemData.subCategory,
           formula: problemData.formula,
           op: problemData.op,
-          correctAnswer: problemData.correctAnswer
+          correctAnswer: problemData.correctAnswer,
+          level: problemData.level,          // 出題段階（計測球は undefined）
+          kind: problemData.kind || 'practice' // 'probe'=計測球 / 'practice'=練習球
         },
+        revealed: Boolean(revealed),
         userAnswer: finalAnswer,
         timeSpentSeconds: actualSeconds,
         mistakeCount: this.currentProblemMistakes,
@@ -275,11 +279,14 @@
 
       // 💥【リアルタイム即時更新の絶対保証】
       // 正解したその瞬間にウォーターマーク（最高正解数）を即座にインクリメント！
-      if (!this.solvedWatermarks) this.solvedWatermarks = {};
-      const uKey = (user && user.studentNumber)
-        ? `${this.normalizeClassName(user.className)}_${user.studentNumber}`
-        : 'default';
-      this.solvedWatermarks[uKey] = (this.solvedWatermarks[uKey] || 0) + 1;
+      // 答えを表示して次へ進んだ問題は「1本」に数えない
+      if (!revealed) {
+        if (!this.solvedWatermarks) this.solvedWatermarks = {};
+        const uKey = (user && user.studentNumber)
+          ? `${this.normalizeClassName(user.className)}_${user.studentNumber}`
+          : 'default';
+        this.solvedWatermarks[uKey] = (this.solvedWatermarks[uKey] || 0) + 1;
+      }
 
       return logEntry;
     }
@@ -406,8 +413,9 @@
 
     // 「熱血1000本ノック」成績集計＆成長比較
     getStatsComparison(userInfo = null) {
-      const todayLogs = this.getTodayLogs(userInfo);
-      const pastLogs = this.getPastLogs(userInfo);
+      // 答えを表示して次へ進んだ問題は、正解数・正解率・平均時間の集計から除く
+      const todayLogs = this.getTodayLogs(userInfo).filter(l => !l.revealed);
+      const pastLogs = this.getPastLogs(userInfo).filter(l => !l.revealed);
 
       const calcStats = (logs) => {
         const count = logs.length;
@@ -431,7 +439,7 @@
       // 🌟 オフラインファースト＆スプレッドシート最優先のハイブリッド集計
       // スプレッドシート由来のサマリー（確定値）が存在する場合はスプレッドシートを最優先（正）とし、
       // まだスプレッドシートに送信できていない未送信ログのみを加算してリアルタイム反映する（巻き戻り防止）
-      const unsyncedLogs = this.getUnsyncedLogsForUser(userInfo);
+      const unsyncedLogs = this.getUnsyncedLogsForUser(userInfo).filter(l => !l.revealed);
       const unsyncedCount = unsyncedLogs.length;
       const unsyncedSec = unsyncedLogs.reduce((sum, l) => sum + (l.timeSpentSeconds || 0), 0);
 

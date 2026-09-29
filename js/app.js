@@ -2,7 +2,17 @@
 (function() {
   'use strict';
 
-  const { generateProblem, checkAnswer } = window.FractionEngine;
+  const { generateLeveledProblem, generateProbeProblem, MAX_LEVEL, LEVEL_LABELS, checkAnswer } = window.FractionEngine;
+
+  // スモールステップ・計測球の設定
+  const PROBE_INTERVAL = 10;          // 通算10問ごとに1問は全員共通の計測球（研究用）
+  const REVEAL_AFTER_PROBE = 3;       // 計測球は3回ミスで答えを表示して次へ
+  const REVEAL_AFTER_PRACTICE = 5;    // 練習球は5回ミスで答えを表示して次へ
+  const PROMOTE_WINDOW = 5;           // 同じ段階の直近5問のうち
+  const PROMOTE_FIRST_TRY = 4;        // 4問を1発正解したら1つ上の段階へ
+  const DEMOTE_HARD_STREAK = 2;       // 3回以上ミス（または答え表示）の問題が2問続いたら1つ下の段階へ
+  const SLOW_SECONDS = 90;            // 1発正解でもこれ以上かかったら昇格の根拠に数えない（下げもしない）
+  const STORAGE_KEY_LEVEL = 'keisan_level_v1';
   const StudyTracker = window.StudyTracker;
   const SheetSync = window.SheetSync;
   const AuthManager = window.AuthManager;
@@ -332,7 +342,6 @@
     constructor() {
       this.sound = new SoundPlayer();
       this.auth = new AuthManager();
-      this.problemMode = 'mix'; // ミックス固定
       this.currentProblem = null;
       this.activeInputBox = null;
       this.comboCount = 0; // 連続ヒット数
@@ -605,6 +614,7 @@
       this.solvedSinceLastBatting = 0;
       this.lastBattingTriggerSolved = -1;
       this.lastKnocksDone = undefined; // 1000本達成判定の基準をユーザーごとにリセット
+      this.levelState = null;          // スモールステップの段階は児童ごと（nextProblem で読み込み）
 
       // ⚡ 出席番号45番（教師用アカウント）のときのみ強制正解ボタンを表示
       const isTeacher = user && Number(user.studentNumber) === 45;
@@ -650,17 +660,114 @@
       }
     }
 
+    // ===== スモールステップ（段階0〜8）の状態管理 =====
+    getLevelStorageKey(user) {
+      return `${STORAGE_KEY_LEVEL}_${this.auth.makeKey(user.className, user.studentNumber)}`;
+    }
+
+    // これまでの成績から最初の段階を決める（端末に記録があればそれを優先）
+    loadLevelState(user) {
+      try {
+        const saved = JSON.parse(localStorage.getItem(this.getLevelStorageKey(user)) || 'null');
+        if (saved && Number.isInteger(saved.level)) {
+          this.levelState = {
+            level: saved.level, recent: saved.recent || [], hardStreak: saved.hardStreak || 0,
+            sinceProbe: saved.sinceProbe || 0
+          };
+          return;
+        }
+      } catch (e) {}
+      const s = user.summary || {};
+      const solved = Number(s.totalSolved) || 0;
+      const acc = Number(s.accuracy);
+      let level = 2; // まだ解いていない児童は異分母の入口から（つまずけばすぐ同分母へ下がる）
+      if (solved > 0 && !isNaN(acc)) {
+        if (acc < 40) level = 0;
+        else if (acc < 60) level = 2;
+        else if (acc < 75 || solved < 20) level = 5;
+        else level = MAX_LEVEL;
+      }
+      this.levelState = { level, recent: [], hardStreak: 0, sinceProbe: 0 };
+      this.saveLevelState(user);
+    }
+
+    saveLevelState(user) {
+      try {
+        localStorage.setItem(this.getLevelStorageKey(user), JSON.stringify(this.levelState));
+      } catch (e) {}
+    }
+
+    // 練習球を解き終えたら段階を見直す。戻り値: 'up' / 'down' / null
+    // ・下げるのは「3回以上ミス」か「答え表示」のときだけ（時間がかかっても自力で解けたなら下げない）
+    // ・1発正解でも SLOW_SECONDS 以上かかった問題は「まだ定着途中」として上げる根拠には数えない
+    updateLevelAfterPractice(mistakes, revealed, seconds) {
+      const st = this.levelState;
+      if (!st) return null;
+      const hard = revealed || mistakes >= 3;
+      const fluent = !revealed && mistakes === 0 && seconds < SLOW_SECONDS;
+      st.hardStreak = hard ? st.hardStreak + 1 : 0;
+      st.recent.push(fluent);
+      if (st.recent.length > PROMOTE_WINDOW) st.recent.shift();
+
+      let change = null;
+      if (st.hardStreak >= DEMOTE_HARD_STREAK && st.level > 0) {
+        st.level--; change = 'down';
+      } else if (fluent && st.recent.length >= PROMOTE_WINDOW &&  // 昇格はスムーズに解けた直後だけ判定
+                 st.recent.filter(Boolean).length >= PROMOTE_FIRST_TRY && st.level < MAX_LEVEL) {
+        st.level++; change = 'up';
+      }
+      if (change) { st.recent = []; st.hardStreak = 0; }
+      return change;
+    }
+
+    // 1問を終える（正解 or 答え表示）: 記録・計測球カウント・段階の見直しをまとめて行う。戻り値: 段階の変化
+    finishProblem(answerDisplay, revealed) {
+      const user = this.auth.getCurrentUser();
+      const mistakes = this.tracker.currentProblemMistakes;
+      const seconds = this.tracker.currentProblemActiveSeconds;
+      this.tracker.recordSolve(this.currentProblem, answerDisplay, user, revealed);
+      let change = null;
+      if (this.levelState) {
+        if (this.currentProblem.kind === 'probe') {
+          this.levelState.sinceProbe = 0; // 計測球は段階の判定に使わない（研究用の共通問題）
+        } else {
+          this.levelState.sinceProbe++;
+          change = this.updateLevelAfterPractice(mistakes, revealed, seconds);
+        }
+        if (user) this.saveLevelState(user);
+      }
+      return change;
+    }
+
+    // 段階が変わったときの監督のひとこと（下がるときも前向きに）
+    announceLevelChange(change) {
+      if (!change || !this.levelState) return;
+      const label = LEVEL_LABELS[this.levelState.level];
+      this.setCoachSpeech(change === 'up'
+        ? `「ステップアップだ！！次は【${label}】に挑戦だ！！」`
+        : `「よし、一度【${label}】で素振りして感覚をつかむぞ！確実にいこう！」`);
+    }
+
     nextProblem() {
       this.isAnswering = false;
-      this.currentProblem = generateProblem({ mode: this.problemMode });
-      
+      const user = this.auth.getCurrentUser();
+      if (user && !this.levelState) this.loadLevelState(user);
+      // 出題した問題数で数えて PROBE_INTERVAL 問に1問は全員共通の計測球、それ以外は段階に応じた練習球
+      // （答えを表示した問題は正解本数に数えないため、正解本数ではなく出題数で数える）
+      const isProbe = Boolean(this.levelState) && this.levelState.sinceProbe >= PROBE_INTERVAL - 1;
+      this.currentProblem = isProbe
+        ? generateProbeProblem()
+        : generateLeveledProblem(this.levelState ? this.levelState.level : MAX_LEVEL);
+
       const f1Str = this.currentProblem.frac1 ? this.formatFrac(this.currentProblem.frac1) : '';
       const f2Str = this.currentProblem.frac2 ? this.formatFrac(this.currentProblem.frac2) : '';
       this.currentProblem.formula = `${f1Str} ${this.currentProblem.op} ${f2Str}`;
       this.currentProblem.correctAnswer = this.formatAns(this.currentProblem.answer);
 
       this.pitchNumberBadge.textContent = `第 ${this.pitchCount} 球！ 勝負！`;
-      this.categoryBadge.textContent = this.currentProblem.category;
+      this.categoryBadge.textContent = this.currentProblem.kind === 'probe'
+        ? '📏 計測球！ 今の実力で勝負だ'
+        : `ステップ ${this.currentProblem.level}：${LEVEL_LABELS[this.currentProblem.level]}`;
       this.renderFormula(this.currentProblem);
       this.resetInputs();
       this.clearFeedback();
@@ -867,7 +974,7 @@
         if (result.isCorrect) {
           this.isAnswering = true;
           const isFirstTry = this.tracker.currentProblemMistakes === 0;
-          this.tracker.recordSolve(this.currentProblem, userAnswerDisplay, this.auth.getCurrentUser());
+          const levelChange = this.finishProblem(userAnswerDisplay, false);
 
           // ☁️ 未保存スコアが発生したので即座に「今すぐ保存 (N)」へボタンを切り替え！
           if (this.sync) {
@@ -898,6 +1005,7 @@
           }
 
           this.showFeedback('correct', `⚾ カキーン！！ 正解だ！！ (答え: ${correctDisplay})`);
+          this.announceLevelChange(levelChange);
           this.updateGrowthDashboard();
 
           // 1000本達成判定は updateGrowthDashboard() 内で行う
@@ -939,9 +1047,6 @@
 
         } else {
           this.isAnswering = true;
-          setTimeout(() => {
-            this.isAnswering = false;
-          }, 400);
 
           // 不正解演出（豪快な空振り三振）
           this.comboCount = 0;
@@ -951,6 +1056,28 @@
             this.sound.playWrong();
           }
           this.tracker.recordMistake(userAnswerDisplay, result.message);
+
+          // 規定回数ミスしたら答えを見せて次へ（手が止まって自信をなくさないように）。「1本」には数えない
+          const revealLimit = this.currentProblem.kind === 'probe' ? REVEAL_AFTER_PROBE : REVEAL_AFTER_PRACTICE;
+          if (this.tracker.currentProblemMistakes >= revealLimit) {
+            this.isAnswering = true; // 次の問題が出るまで入力を受け付けない
+            const levelChange = this.finishProblem(userAnswerDisplay, true);
+            if (this.sync) this.sync.checkAndNotify();
+            this.showFeedback('reveal', `📖 答えは ${correctDisplay} だ！ 式と答えを見比べて、次の1球でリベンジだ！`);
+            this.setCoachSpeech(this.currentProblem.kind === 'probe'
+              ? '「計測球はナイスチャレンジだ！今の実力を知るのも大事な練習だぞ！」'
+              : '「答えを見てやり方をつかめ！分かれば次は打てる！！」');
+            this.announceLevelChange(levelChange);
+            this.pitchCount++;
+            this.updateGrowthDashboard();
+            setTimeout(() => this.nextProblem(), 3500); // 答えを読む時間をとる
+            return;
+          }
+
+          // 連打防止: 少し待ってから次の解答を受け付ける
+          setTimeout(() => {
+            this.isAnswering = false;
+          }, 400);
 
           const scolds = [
             '「バカモン！！まだ腰が入っとらん！！もう一丁！！」',
@@ -1615,9 +1742,11 @@
 
       this.logTableBody.innerHTML = logs.slice().reverse().map(log => {
         const timeStr = log.timestamp ? new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-';
-        const mistakeBadge = (log.mistakeCount === 0)
-          ? '<span style="color:#15803d; font-weight:bold;">1発クリーンヒット⚾</span>'
-          : `<span style="color:#b91c1c; font-weight:bold;">${log.mistakeCount}回空振り</span>`;
+        const mistakeBadge = log.revealed
+          ? '<span style="color:#7c3aed; font-weight:bold;">📖 答えを見て学習</span>'
+          : (log.mistakeCount === 0)
+            ? '<span style="color:#15803d; font-weight:bold;">1発クリーンヒット⚾</span>'
+            : `<span style="color:#b91c1c; font-weight:bold;">${log.mistakeCount}回空振り</span>`;
         const formulaHtml = this.renderFormulaToHtml(log.problem);
         const answerHtml = this.renderAnswerToHtml(log.problem);
         const categoryStr = escapeHtml(log.problem ? (log.problem.category || '分数計算') : '分数計算');

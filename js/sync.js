@@ -137,7 +137,10 @@
           category: l.problem ? l.problem.category : '',
           correctAnswer: l.problem ? l.problem.correctAnswer : '',
           timeSpentSeconds: l.timeSpentSeconds || 0,
-          mistakeCount: l.mistakeCount || 0
+          mistakeCount: l.mistakeCount || 0,
+          level: (l.problem && l.problem.level !== undefined && l.problem.level !== null) ? l.problem.level : '',
+          kind: (l.problem && l.problem.kind) || '',
+          revealed: Boolean(l.revealed)
         }))
       };
 

@@ -89,11 +89,12 @@ function deduplicateLogSheet(ss) {
 function menuFixLogSheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var res = fixLogSheetData(ss);
-  SpreadsheetApp.getUi().alert('「計算ドリル記録」シートの修復が完了しました！\n\nヘッダーを正しい13項目に更新し、日付化していた正解データを ' + res.fixedCount + ' 件修復しました。');
+  SpreadsheetApp.getUi().alert('「計算ドリル記録」シートの修復が完了しました！\n\nヘッダーを正しい16項目に更新し、日付化していた正解データを ' + res.fixedCount + ' 件修復しました。');
 }
 
-// 「計算ドリル記録」の列数（A〜M）。M列 = ログID（端末で採番される一意ID。再送時の重複判定に使用）
-var LOG_COLS = 13;
+// 「計算ドリル記録」の列数（A〜P）。M列 = ログID（端末で採番される一意ID。再送時の重複判定に使用）
+// N列 = 出題段階(0〜8)、O列 = 種別(計測球/練習球)、P列 = 答え表示（規定回数ミスで答えを見せて次へ進んだ）
+var LOG_COLS = 16;
 var LOG_ID_COL = 13;
 
 // 旧形式（ログIDなし）の行に使う重複判定キー: クラス|番号|セッション|問題式|正解
@@ -177,7 +178,10 @@ function doPost(e) {
           log.mistakeCount || 0,                             // J: 間違えた回数
           sId,                                               // K: セッションID
           "'" + dateStr,                                     // L: 日付 (YYYY-MM-DD)
-          logId                                              // M: ログID
+          logId,                                             // M: ログID
+          (log.level === '' || log.level === undefined || log.level === null) ? '' : Number(log.level), // N: 出題段階
+          log.kind === 'probe' ? '計測球' : (log.kind === 'practice' ? '練習球' : ''),              // O: 種別
+          log.revealed ? '答え表示' : ''                                                           // P: 答え表示
         ]);
       }
 
@@ -220,14 +224,8 @@ function doPost(e) {
           new Date(),
           u.className,
           Number(u.studentNumber),
-          u.nickname,
-          "=COUNTIFS('計算ドリル記録'!$B:$B, $B" + newRow + ", '計算ドリル記録'!$C:$C, $C" + newRow + ")",
-          "=IF($E" + newRow + ">0, ROUND(SUMIFS('計算ドリル記録'!$I:$I, '計算ドリル記録'!$B:$B, $B" + newRow + ", '計算ドリル記録'!$C:$C, $C" + newRow + ")/60, 1), 0)",
-          "=IF($E" + newRow + ">0, ROUND(COUNTIFS('計算ドリル記録'!$B:$B, $B" + newRow + ", '計算ドリル記録'!$C:$C, $C" + newRow + ", '計算ドリル記録'!$J:$J, 0) / $E" + newRow + " * 100), 100)",
-          "=IF($E" + newRow + ">0, ROUND(SUMIFS('計算ドリル記録'!$I:$I, '計算ドリル記録'!$B:$B, $B" + newRow + ", '計算ドリル記録'!$C:$C, $C" + newRow + ") / $E" + newRow + "), 0)",
-          "=SUMIFS('計算ドリル記録'!$J:$J, '計算ドリル記録'!$B:$B, $B" + newRow + ", '計算ドリル記録'!$C:$C, $C" + newRow + ")",
-          "=IF($E" + newRow + ">0, IFERROR(TEXT(MAXIFS('計算ドリル記録'!$A:$A, '計算ドリル記録'!$B:$B, $B" + newRow + ", '計算ドリル記録'!$C:$C, $C" + newRow + "), \"yyyy-mm-dd hh:mm:ss\"), \"\"), \"\")"
-        ]);
+          u.nickname
+        ].concat(userRowFormulas(newRow)));
       }
 
       return ContentService.createTextOutput(JSON.stringify({
@@ -255,8 +253,136 @@ function doPost(e) {
 var ADMIN_ACTIONS = [
   'inspect_sheets', 'fix_sheets', 'setup_research', 'setup_daily', 'apply_formulas',
   'clean_test_rows', 'find_duplicates', 'deduplicate_logs', 'inspect_research',
-  'update_research_chart', 'inspect_daily'
+  'update_research_chart', 'inspect_daily', 'learning_stats'
 ];
+
+/**
+ * 📊 難易度設計のための学習状況集計（ニックネーム・個々のログは含めない）
+ * - 単元の要素（真分数/帯分数 × 足し算/引き算 × 繰り上がり・下がり × 約分）別の成績
+ * - 児童別（クラス・番号のみ）の真分数と帯分数の成績差、序盤→直近の伸び
+ * - 通算何問目かの区間別の学習曲線
+ * 教師用(45番)とテストセッション(test_)は除外
+ */
+function computeLearningStats(ss) {
+  var sheet = ss.getSheetByName('計算ドリル記録');
+  if (!sheet || sheet.getLastRow() <= 1) return { status: 'success', totalRows: 0 };
+  var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 12).getValues();
+
+  function newAgg() { return { n: 0, first: 0, sec: 0, mis: 0, hard: 0, secs: [] }; }
+  function add(a, sec, mis) {
+    a.n++; a.sec += sec; a.mis += mis; a.secs.push(sec);
+    if (mis === 0) a.first++;
+    if (mis >= 3) a.hard++;
+  }
+  function fin(a) {
+    if (!a || a.n === 0) return { n: 0 };
+    var s = a.secs.slice().sort(function (x, y) { return x - y; });
+    return {
+      n: a.n,
+      firstTryRate: Math.round(a.first / a.n * 1000) / 10,   // 1発正解率(%)
+      avgSec: Math.round(a.sec / a.n * 10) / 10,
+      medianSec: s[Math.floor(s.length / 2)],
+      avgMistakes: Math.round(a.mis / a.n * 100) / 100,
+      mistakes3PlusRate: Math.round(a.hard / a.n * 1000) / 10 // 3回以上空振りした問題の割合(%)
+    };
+  }
+  function features(cat) {
+    cat = String(cat || '');
+    return {
+      mixed: cat.indexOf('帯分数') !== -1,
+      op: cat.indexOf('引き算') !== -1 ? '-' : '+',
+      regroup: cat.indexOf('繰り上がりあり') !== -1 || cat.indexOf('繰り下がりあり') !== -1,
+      reduce: cat.indexOf('約分') !== -1
+    };
+  }
+
+  var byCategory = {}, byFeature = {}, students = {}, curve = {};
+  var used = 0, excluded = 0;
+  var dateMin = null, dateMax = null;
+
+  // 児童ごとに時系列で「通算何問目か」を数えるため、日時順に処理
+  values.sort(function (a, b) { return new Date(a[0]) - new Date(b[0]); });
+
+  for (var i = 0; i < values.length; i++) {
+    var r = values[i];
+    var cls = String(r[1] || '').trim();
+    var num = Number(r[2]);
+    var sid = String(r[10] || '');
+    if (!cls || !num || num === 45 || sid.indexOf('test_') === 0) { excluded++; continue; }
+    var sec = Number(r[8]) || 0;
+    var mis = Number(r[9]) || 0;
+    var cat = String(r[6] || '');
+    var f = features(cat);
+    used++;
+    var d = new Date(r[0]);
+    if (!isNaN(d)) {
+      if (!dateMin || d < dateMin) dateMin = d;
+      if (!dateMax || d > dateMax) dateMax = d;
+    }
+
+    if (!byCategory[cat]) byCategory[cat] = newAgg();
+    add(byCategory[cat], sec, mis);
+
+    var fKey = (f.mixed ? '帯分数' : '真分数') + (f.op === '+' ? '・足し算' : '・引き算') +
+      (f.regroup ? '・繰り上がり/下がりあり' : '') + (f.reduce ? '・約分あり' : '');
+    if (!byFeature[fKey]) byFeature[fKey] = newAgg();
+    add(byFeature[fKey], sec, mis);
+
+    var sKey = cls + '_' + num;
+    if (!students[sKey]) students[sKey] = { cls: cls, num: num, count: 0, all: newAgg(), proper: newAgg(), mixed: newAgg(), mixedRegroup: newAgg(), mixedSeq: [] };
+    var st = students[sKey];
+    st.count++;
+    add(st.all, sec, mis);
+    add(f.mixed ? st.mixed : st.proper, sec, mis);
+    if (f.mixed && f.regroup) add(st.mixedRegroup, sec, mis);
+    if (f.mixed) st.mixedSeq.push([sec, mis]);
+
+    // 学習曲線: 通算問題数の区間 × 真分数/帯分数
+    var bin = st.count <= 20 ? '001-020' : st.count <= 50 ? '021-050' : st.count <= 100 ? '051-100' :
+      st.count <= 200 ? '101-200' : st.count <= 400 ? '201-400' : '401+';
+    var cKey = bin + (f.mixed ? '_帯分数' : '_真分数');
+    if (!curve[cKey]) curve[cKey] = newAgg();
+    add(curve[cKey], sec, mis);
+  }
+
+  function finMap(m) { var o = {}; for (var k in m) o[k] = fin(m[k]); return o; }
+
+  var studentList = [];
+  for (var k in students) {
+    var s = students[k];
+    // 帯分数の序盤20問と直近20問の比較（伸び）
+    var early = newAgg(), late = newAgg();
+    var seq = s.mixedSeq;
+    for (var e = 0; e < Math.min(20, seq.length); e++) add(early, seq[e][0], seq[e][1]);
+    for (var l = Math.max(0, seq.length - 20); l < seq.length; l++) add(late, seq[l][0], seq[l][1]);
+    studentList.push({
+      student: s.cls + ' ' + s.num + '番',
+      total: s.count,
+      all: fin(s.all),
+      proper: fin(s.proper),
+      mixed: fin(s.mixed),
+      mixedRegroup: fin(s.mixedRegroup),
+      mixedEarly20: seq.length >= 40 ? fin(early) : null,
+      mixedLate20: seq.length >= 40 ? fin(late) : null
+    });
+  }
+  studentList.sort(function (a, b) { return b.total - a.total; });
+
+  return {
+    status: 'success',
+    totalRows: values.length,
+    usedRows: used,
+    excludedRows: excluded,
+    period: {
+      from: dateMin ? Utilities.formatDate(dateMin, 'Asia/Tokyo', 'yyyy-MM-dd') : '',
+      to: dateMax ? Utilities.formatDate(dateMax, 'Asia/Tokyo', 'yyyy-MM-dd') : ''
+    },
+    byCategory: finMap(byCategory),
+    byFeature: finMap(byFeature),
+    learningCurve: finMap(curve),
+    students: studentList
+  };
+}
 
 /**
  * 管理者リクエストの判定。
@@ -390,6 +516,12 @@ function handleGet_(e) {
           accuracy: solvedCount > 0 ? Math.round((firstTryCount / solvedCount) * 100) : 100
         }
       })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 2-2. 学習状況の集計（難易度設計の分析用・管理者専用）。個々のログやニックネームは返さず集計値のみ
+    if (action === 'learning_stats') {
+      return ContentService.createTextOutput(JSON.stringify(computeLearningStats(ss)))
+        .setMimeType(ContentService.MimeType.JSON);
     }
 
     // 3. スプレッドシート内部の全シート検証（デバッグ・調査用）
@@ -600,6 +732,25 @@ function handleGet_(e) {
 // --- 児童名簿シートの自動計算式設定（GAS軽量化・同時実行制限対策） ---
 
 /**
+ * 「児童名簿」r行目の E〜J 列の計算式。
+ * 答えを表示して次へ進んだ問題（P列=答え表示）は、累計問題数・1発正解率・平均解答時間に数えない
+ * （学習時間と累計ミス回数には含める）
+ */
+function userRowFormulas(r) {
+  var L = "'計算ドリル記録'!";
+  var me = L + "$B:$B, $B" + r + ", " + L + "$C:$C, $C" + r;
+  var solvedOnly = ", " + L + "$P:$P, \"<>答え表示\"";
+  return [
+    "=COUNTIFS(" + me + solvedOnly + ")",
+    "=IF($E" + r + ">0, ROUND(SUMIFS(" + L + "$I:$I, " + me + ")/60, 1), 0)",
+    "=IF($E" + r + ">0, ROUND(COUNTIFS(" + me + ", " + L + "$J:$J, 0" + solvedOnly + ") / $E" + r + " * 100), 100)",
+    "=IF($E" + r + ">0, ROUND(SUMIFS(" + L + "$I:$I, " + me + solvedOnly + ") / $E" + r + "), 0)",
+    "=SUMIFS(" + L + "$J:$J, " + me + ")",
+    "=IF($E" + r + ">0, IFERROR(TEXT(MAXIFS(" + L + "$A:$A, " + me + "), \"yyyy-mm-dd hh:mm:ss\"), \"\"), \"\")"
+  ];
+}
+
+/**
  * ⚡ 「児童名簿」シートの全生徒行（E〜J列）にスプレッドシート関数を適用・保証
  * - forceAll が true の場合は全行に強制上書き
  * - false の場合は数式が未設定または空の行がある場合のみ自動適用
@@ -615,9 +766,10 @@ function ensureUserSheetFormulas(userSheet, forceAll) {
 
   if (!needsUpdate) {
     for (var i = 0; i < numRows; i++) {
-      // E〜J列のいずれかに数式が入っていない場合、更新対象とする
+      // E〜J列のいずれかに数式が入っていない、または旧式（答え表示を除外しない）数式の場合、更新対象とする
       if (!existingFormulas[i][0] || !existingFormulas[i][1] || !existingFormulas[i][2] ||
-          !existingFormulas[i][3] || !existingFormulas[i][4] || !existingFormulas[i][5]) {
+          !existingFormulas[i][3] || !existingFormulas[i][4] || !existingFormulas[i][5] ||
+          existingFormulas[i][0].indexOf('答え表示') === -1) {
         needsUpdate = true;
         break;
       }
@@ -630,14 +782,7 @@ function ensureUserSheetFormulas(userSheet, forceAll) {
 
   var formulas = [];
   for (var r = 2; r <= lastRow; r++) {
-    formulas.push([
-      "=COUNTIFS('計算ドリル記録'!$B:$B, $B" + r + ", '計算ドリル記録'!$C:$C, $C" + r + ")",
-      "=IF($E" + r + ">0, ROUND(SUMIFS('計算ドリル記録'!$I:$I, '計算ドリル記録'!$B:$B, $B" + r + ", '計算ドリル記録'!$C:$C, $C" + r + ")/60, 1), 0)",
-      "=IF($E" + r + ">0, ROUND(COUNTIFS('計算ドリル記録'!$B:$B, $B" + r + ", '計算ドリル記録'!$C:$C, $C" + r + ", '計算ドリル記録'!$J:$J, 0) / $E" + r + " * 100), 100)",
-      "=IF($E" + r + ">0, ROUND(SUMIFS('計算ドリル記録'!$I:$I, '計算ドリル記録'!$B:$B, $B" + r + ", '計算ドリル記録'!$C:$C, $C" + r + ") / $E" + r + "), 0)",
-      "=SUMIFS('計算ドリル記録'!$J:$J, '計算ドリル記録'!$B:$B, $B" + r + ", '計算ドリル記録'!$C:$C, $C" + r + ")",
-      "=IF($E" + r + ">0, IFERROR(TEXT(MAXIFS('計算ドリル記録'!$A:$A, '計算ドリル記録'!$B:$B, $B" + r + ", '計算ドリル記録'!$C:$C, $C" + r + "), \"yyyy-mm-dd hh:mm:ss\"), \"\"), \"\")"
-    ]);
+    formulas.push(userRowFormulas(r));
   }
 
   userSheet.getRange(2, 5, numRows, 6).setFormulas(formulas);
@@ -704,14 +849,8 @@ function recalculateAllUserSummaries() {
         new Date(),
         c,
         n,
-        String(r[3] || '児童'),
-        "=COUNTIFS('計算ドリル記録'!$B:$B, $B" + newR + ", '計算ドリル記録'!$C:$C, $C" + newR + ")",
-        "=IF($E" + newR + ">0, ROUND(SUMIFS('計算ドリル記録'!$I:$I, '計算ドリル記録'!$B:$B, $B" + newR + ", '計算ドリル記録'!$C:$C, $C" + newR + ")/60, 1), 0)",
-        "=IF($E" + newR + ">0, ROUND(COUNTIFS('計算ドリル記録'!$B:$B, $B" + newR + ", '計算ドリル記録'!$C:$C, $C" + newR + ", '計算ドリル記録'!$J:$J, 0) / $E" + newR + " * 100), 100)",
-        "=IF($E" + newR + ">0, ROUND(SUMIFS('計算ドリル記録'!$I:$I, '計算ドリル記録'!$B:$B, $B" + newR + ", '計算ドリル記録'!$C:$C, $C" + newR + ") / $E" + newR + "), 0)",
-        "=SUMIFS('計算ドリル記録'!$J:$J, '計算ドリル記録'!$B:$B, $B" + newR + ", '計算ドリル記録'!$C:$C, $C" + newR + ")",
-        "=IF($E" + newR + ">0, IFERROR(TEXT(MAXIFS('計算ドリル記録'!$A:$A, '計算ドリル記録'!$B:$B, $B" + newR + ", '計算ドリル記録'!$C:$C, $C" + newR + "), \"yyyy-mm-dd hh:mm:ss\"), \"\"), \"\")"
-      ]);
+        String(r[3] || '児童')
+      ].concat(userRowFormulas(newR)));
       rowMap[sKey] = newR;
       insertedCount++;
     }
@@ -735,7 +874,8 @@ function getOrCreateLogSheet(ss) {
   var headers = [
     '記録日時', 'クラス', '出席番号', 'ニックネーム',
     '問題式', '演算', '単元分類', '正解',
-    '所要時間(秒)', '間違えた回数', 'セッションID', '日付(検索用)', 'ログID'
+    '所要時間(秒)', '間違えた回数', 'セッションID', '日付(検索用)', 'ログID',
+    '出題段階', '種別', '答え表示'
   ];
 
   if (!sheet) {
@@ -772,7 +912,7 @@ function getOrCreateLogSheet(ss) {
 
 /**
  * 🛠️ 「計算ドリル記録」シートの全データ修復
- * - ヘッダーを正しい13項目に更新
+ * - ヘッダーを正しい16項目に更新
  * - 日付型に勝手に誤変換されてしまった正解データを元の分数文字列に復元
  * - 列幅の自動調整
  */
@@ -989,16 +1129,16 @@ function setupDailySummarySheet() {
       num, // A列: 番号
       // B列: ニックネーム
       '=IFERROR(INDEX(児童名簿!$D:$D, MATCH(1, (児童名簿!$B:$B=$D$1)*(児童名簿!$C:$C=' + num + '), 0)), "-")',
-      // C列: 解いた問題数
-      '=COUNTIFS(計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + ', 計算ドリル記録!$A:$A, ">="&$J$1, 計算ドリル記録!$A:$A, "<="&$K$1)',
+      // C列: 解いた問題数（答えを表示して次へ進んだ問題は数えない）
+      '=COUNTIFS(計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + ', 計算ドリル記録!$A:$A, ">="&$J$1, 計算ドリル記録!$A:$A, "<="&$K$1, 計算ドリル記録!$P:$P, "<>答え表示")',
       // D列: 学習時間(分)
       '=IF(C' + row + '=0, 0, ROUND(SUMIFS(計算ドリル記録!$I:$I, 計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + ', 計算ドリル記録!$A:$A, ">="&$J$1, 計算ドリル記録!$A:$A, "<="&$K$1)/60, 1))',
       // E列: 平均解答時間(秒)
-      '=IF(C' + row + '=0, "-", ROUND(SUMIFS(計算ドリル記録!$I:$I, 計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + ', 計算ドリル記録!$A:$A, ">="&$J$1, 計算ドリル記録!$A:$A, "<="&$K$1)/C' + row + ', 0))',
+      '=IF(C' + row + '=0, "-", ROUND(SUMIFS(計算ドリル記録!$I:$I, 計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + ', 計算ドリル記録!$A:$A, ">="&$J$1, 計算ドリル記録!$A:$A, "<="&$K$1, 計算ドリル記録!$P:$P, "<>答え表示")/C' + row + ', 0))',
       // F列: 間違えた回数
       '=IF(C' + row + '=0, "-", SUMIFS(計算ドリル記録!$J:$J, 計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + ', 計算ドリル記録!$A:$A, ">="&$J$1, 計算ドリル記録!$A:$A, "<="&$K$1))',
       // G列: 1発正解数
-      '=IF(C' + row + '=0, "-", COUNTIFS(計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + ', 計算ドリル記録!$A:$A, ">="&$J$1, 計算ドリル記録!$A:$A, "<="&$K$1, 計算ドリル記録!$J:$J, 0))',
+      '=IF(C' + row + '=0, "-", COUNTIFS(計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + ', 計算ドリル記録!$A:$A, ">="&$J$1, 計算ドリル記録!$A:$A, "<="&$K$1, 計算ドリル記録!$J:$J, 0, 計算ドリル記録!$P:$P, "<>答え表示"))',
       // H列: 1発正解率
       '=IF(C' + row + '=0, "-", TEXT(G' + row + '/C' + row + ', "0.0%"))'
     ]);
