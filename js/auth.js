@@ -43,8 +43,9 @@
 
     makeKey(className, number) {
       // 「5年1組」「1組」「1」などの表記揺れを吸収し、統一キーを生成
+      // 「5年1組」の学年(5)ではなく「組」の直前の数字(1)を組番号とする。「1」だけの表記は末尾の数字を使う
       const str = String(className || '').trim();
-      const match = str.match(/(\d+)\s*組?/);
+      const match = str.match(/(\d+)\s*組/) || str.match(/(\d+)(?!.*\d)/);
       const classNum = match ? match[1] : str;
       return `組${classNum}-番${Number(number)}`;
     }

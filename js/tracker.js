@@ -17,6 +17,8 @@
   const STORAGE_KEY_LOGS = 'keisan_problem_logs_v1';
   const IDLE_LIMIT_SECONDS = 60; // 60秒間無操作で放置と判定
   const TARGET_KNOCKS = 1000;    // 1000本ノック！
+  const SYNCED_LOG_KEEP_DAYS = 7;  // 送信済みログを端末に残す日数（それより前はスプレッドシートにのみ保存）
+  const MAX_SYNCED_LOGS = 2000;    // 送信済みログを端末に残す上限件数（共用端末で容量オーバーを防ぐ）
 
   class StudyTracker {
     constructor(options = {}) {
@@ -40,7 +42,7 @@
       this.currentProblemHistory = [];
 
       this.sessionId = this.getOrCreateSessionId();
-      this.loadTodaySession();
+      // 本日の特打時間はログイン時（setCurrentUser）に児童ごとに読み込む
 
       this.setupActivityListeners();
       this.setupVisibilityListener();
@@ -56,10 +58,19 @@
       return id;
     }
 
+    // 共用端末でも本日の特打時間が混ざらないよう、児童ごとに別キーで保存する
+    getSessionStorageKey() {
+      const u = this.currentUser;
+      return (u && u.studentNumber)
+        ? `${STORAGE_KEY_SESSION}_${this.normalizeClassName(u.className)}_${Number(u.studentNumber)}`
+        : STORAGE_KEY_SESSION;
+    }
+
     loadTodaySession() {
+      this.activeSeconds = 0;
       if (typeof localStorage === 'undefined') return;
       try {
-        const saved = localStorage.getItem(STORAGE_KEY_SESSION);
+        const saved = localStorage.getItem(this.getSessionStorageKey());
         if (saved) {
           const data = JSON.parse(saved);
           const todayStr = new Date().toDateString();
@@ -81,7 +92,7 @@
           activeSeconds: this.activeSeconds,
           updatedAt: new Date().toISOString()
         };
-        localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(data));
+        localStorage.setItem(this.getSessionStorageKey(), JSON.stringify(data));
       } catch (e) {
         console.warn('Failed to save session:', e);
       }
@@ -219,7 +230,9 @@
     }
 
     setCurrentUser(user) {
+      if (this.currentUser) this.saveSession(); // 前の児童の時間を保存してから切り替え
       this.currentUser = user;
+      this.loadTodaySession();
     }
 
     recordSolve(problemData, finalAnswer, userInfo = null) {
@@ -273,12 +286,51 @@
 
     saveProblemLog(logEntry) {
       if (typeof localStorage === 'undefined') return;
+      const logs = this.getAllLogs();
+      logs.push(logEntry);
       try {
-        const logs = this.getAllLogs();
-        logs.push(logEntry);
         localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(logs));
       } catch (e) {
-        console.error('Failed to save log entry:', e);
+        // 容量オーバー時は送信済みの過去ログ（今日以外）を捨てて再保存。未送信ログは必ず残す
+        console.warn('Log storage full, pruning synced logs and retrying:', e);
+        try {
+          localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(this.pruneLogArray(logs, 0)));
+        } catch (e2) {
+          console.error('Failed to save log entry:', e2);
+        }
+      }
+    }
+
+    // 送信済みログのうち keepDays 日より前のもの（今日の分は常に保持）と、上限件数を超える古いものを除く。
+    // 未送信ログは絶対に消さない（スプレッドシートに届くまで端末が唯一の記録）
+    pruneLogArray(logs, keepDays = SYNCED_LOG_KEEP_DAYS) {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const cutoff = todayStart.getTime() - keepDays * 24 * 60 * 60 * 1000;
+      let syncedKept = 0;
+      // 新しい順に数えて上限を超えた送信済みログを除外
+      const keepFlags = new Array(logs.length);
+      for (let i = logs.length - 1; i >= 0; i--) {
+        const l = logs[i];
+        if (!l.syncedToSheet) { keepFlags[i] = true; continue; }
+        const t = new Date(l.timestamp).getTime();
+        const recent = !isNaN(t) && t >= cutoff;
+        keepFlags[i] = recent && syncedKept < MAX_SYNCED_LOGS;
+        if (keepFlags[i]) syncedKept++;
+      }
+      return logs.filter((_, i) => keepFlags[i]);
+    }
+
+    // 端末内ログの整理（同期成功後に呼ぶ）
+    pruneSyncedLogs() {
+      if (typeof localStorage === 'undefined') return;
+      const logs = this.getAllLogs();
+      const pruned = this.pruneLogArray(logs);
+      if (pruned.length === logs.length) return;
+      try {
+        localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(pruned));
+      } catch (e) {
+        console.warn('Failed to prune synced logs:', e);
       }
     }
 
@@ -294,59 +346,37 @@
 
     normalizeClassName(name) {
       if (!name) return '';
-      const m = String(name).match(/([1-6])(?:\s*組)?/);
+      // 「5年1組」の学年(5)ではなく「組」の直前の数字(1)を使う（学年で比べると全クラスが同一扱いになる）
+      const s = String(name);
+      const m = s.match(/(\d+)\s*組/) || s.match(/(\d+)(?!.*\d)/);
       return m ? `${m[1]}組` : String(name).trim();
+    }
+
+    // ログがその児童のものか（クラス・番号のない旧形式ログは誰のものか不明なので、どの児童にも数えない）
+    isLogOfUser(l, user) {
+      if (!user || !user.studentNumber) return true;
+      if (!l.className && !l.studentNumber) return false;
+      const targetClass = this.normalizeClassName(user.className);
+      const logClass = this.normalizeClassName(l.className);
+      return (!targetClass || !logClass || logClass === targetClass) && Number(l.studentNumber) === Number(user.studentNumber);
     }
 
     getTodayLogs(userInfo = null) {
       const user = userInfo || this.currentUser;
       const today = new Date().toDateString();
-      let logs = this.getAllLogs().filter(log => new Date(log.timestamp).toDateString() === today);
-      if (user && user.studentNumber) {
-        const targetClass = this.normalizeClassName(user.className);
-        const targetNum = Number(user.studentNumber);
-        logs = logs.filter(l => {
-          // 旧形式のログ（className/studentNumber未保存）は救済表示
-          if (!l.className && !l.studentNumber) return true;
-          const logClass = this.normalizeClassName(l.className);
-          const logNum = Number(l.studentNumber);
-          return (!targetClass || !logClass || logClass === targetClass) && logNum === targetNum;
-        });
-      }
-      return logs;
+      return this.getAllLogs().filter(l => new Date(l.timestamp).toDateString() === today && this.isLogOfUser(l, user));
     }
 
     getPastLogs(userInfo = null) {
       const user = userInfo || this.currentUser;
       const today = new Date().toDateString();
-      let logs = this.getAllLogs().filter(log => new Date(log.timestamp).toDateString() !== today);
-      if (user && user.studentNumber) {
-        const targetClass = this.normalizeClassName(user.className);
-        const targetNum = Number(user.studentNumber);
-        logs = logs.filter(l => {
-          if (!l.className && !l.studentNumber) return true;
-          const logClass = this.normalizeClassName(l.className);
-          const logNum = Number(l.studentNumber);
-          return (!targetClass || !logClass || logClass === targetClass) && logNum === targetNum;
-        });
-      }
-      return logs;
+      return this.getAllLogs().filter(l => new Date(l.timestamp).toDateString() !== today && this.isLogOfUser(l, user));
     }
 
     // 指定ユーザーの未送信（未同期）ログ一覧を取得
     getUnsyncedLogsForUser(userInfo = null) {
       const user = userInfo || this.currentUser;
-      const allLogs = this.getAllLogs();
-      const unsynced = allLogs.filter(l => !l.syncedToSheet);
-      if (!user || !user.studentNumber) return unsynced;
-      const targetClass = this.normalizeClassName(user.className);
-      const targetNum = Number(user.studentNumber);
-      return unsynced.filter(l => {
-        if (!l.className && !l.studentNumber) return true;
-        const logClass = this.normalizeClassName(l.className);
-        const logNum = Number(l.studentNumber);
-        return (!targetClass || !logClass || logClass === targetClass) && logNum === targetNum;
-      });
+      return this.getAllLogs().filter(l => !l.syncedToSheet && this.isLogOfUser(l, user));
     }
 
     // スプレッドシートから削除された児童、または新規入部児童の古い送信済みログを端末から消去
@@ -503,7 +533,7 @@
     clearLogs() {
       if (typeof localStorage !== 'undefined') {
         localStorage.removeItem(STORAGE_KEY_LOGS);
-        localStorage.removeItem(STORAGE_KEY_SESSION);
+        localStorage.removeItem(this.getSessionStorageKey());
       }
       this.activeSeconds = 0;
       this.targetReachedFired = false;

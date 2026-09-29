@@ -383,6 +383,8 @@
       this.sync = new SheetSync({
         onStatusChange: (status) => this.updateSyncButton(status),
         onSyncSuccess: async (info) => {
+          // 送信済みになった古いログを端末から整理（容量オーバーによる記録失敗を防ぐ）
+          this.tracker.pruneSyncedLogs();
           // 🌟 Push成功後、スプレッドシートから最新の名簿・サマリーをPullしてダッシュボード＆名簿を更新
           try {
             const users = await this.sync.fetchUsersFromSheet(5000);
@@ -1635,9 +1637,16 @@
     // =========================================================================
     // 🏆 熱血！1000本ノック猛者番付（ランキング）処理（5分クールダウン制限・リロード防止）
     // =========================================================================
+    // 5分制限は児童ごと（共用端末で他の児童の閲覧に巻き込まれない）。ログイン前は端末共通
+    getRankingCooldownKey() {
+      const user = this.auth ? this.auth.getCurrentUser() : null;
+      const base = 'keisan_last_ranking_view_time_v1';
+      return user ? `${base}_${this.auth.makeKey(user.className, user.studentNumber)}` : base;
+    }
+
     getRankingCooldownRemainingSeconds() {
       try {
-        const lastTime = Number(localStorage.getItem('keisan_last_ranking_view_time_v1')) || 0;
+        const lastTime = Number(localStorage.getItem(this.getRankingCooldownKey())) || 0;
         if (!lastTime) return 0;
         const elapsed = Date.now() - lastTime;
         const cooldownMs = 5 * 60 * 1000; // 5分間
@@ -1683,7 +1692,7 @@
 
       // 閲覧時刻をlocalStorageに記録（リロード対策）
       try {
-        localStorage.setItem('keisan_last_ranking_view_time_v1', Date.now().toString());
+        localStorage.setItem(this.getRankingCooldownKey(), Date.now().toString());
       } catch (e) {}
 
       this.rankingFromAuth = fromAuth;

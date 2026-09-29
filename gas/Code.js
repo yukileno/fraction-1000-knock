@@ -868,6 +868,9 @@ function getOrCreateUserSheet(ss) {
     if (curRow1.length < headers.length || !curRow1[4]) {
       sheet.getRange(1, 1, 1, headers.length).setValues([headers])
         .setBackground('#059669').setFontColor('#ffffff').setFontWeight('bold');
+    } else {
+      // 正常なシートでは書式設定をスキップ（名簿取得のたびに書き込むと同時アクセス時に遅くなる）
+      return sheet;
     }
   }
 
