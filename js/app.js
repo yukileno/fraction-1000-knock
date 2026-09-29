@@ -1128,12 +1128,30 @@
         this.authStepSelect.style.display = 'block';
       });
 
-      // キーボード操作
+      // キーボード操作＆全角入力二重化完全防止
       const boxes = [this.inputWhole, this.inputNum, this.inputDen];
       boxes.forEach(box => {
+        if (!box) return;
+        // 💥【超重要・Chromebook全角二重入力根絶】
+        // readonly と inputmode=none を徹底し、ブラウザ/IMEによる直接文字挿入を100%遮断
+        box.setAttribute('readonly', 'true');
+        box.setAttribute('inputmode', 'none');
+
         box.addEventListener('focus', () => this.setActiveInput(box));
         box.addEventListener('click', () => this.setActiveInput(box));
-        // 全角数字が入力された場合の自動半角変換＆数字のみフィルタ
+
+        // ブラウザネイティブの直接入力を一切受け付けない（すべて自前のinputNumpadDigitで管理）
+        box.addEventListener('beforeinput', (e) => {
+          e.preventDefault();
+        });
+        box.addEventListener('compositionstart', (e) => {
+          e.preventDefault();
+        });
+        box.addEventListener('compositionend', (e) => {
+          e.preventDefault();
+        });
+
+        // 万が一ペースト等の特殊操作で値が入った場合の自動半角変換＆数字のみフィルタ
         box.addEventListener('input', () => {
           const raw = box.value;
           const cleaned = raw.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).replace(/[^0-9]/g, '');
