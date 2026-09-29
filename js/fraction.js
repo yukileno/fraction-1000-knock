@@ -275,19 +275,31 @@
       };
     }
 
-    const inWhole = Number(input.whole) || 0;
-    const inNum = Number(input.num) || 0;
-    const inDen = Number(input.den) || 1;
+    const isBlank = (v) => v === undefined || v === null || String(v).trim() === '';
+    const numBlank = isBlank(input.num);
+    const denBlank = isBlank(input.den);
 
-    const ans = problemData.answer;
-
-    if (inNum > 0 && inDen <= 0) {
+    // 分子だけ・分母だけの入力や分母0は、分母1として扱わず入力やり直しにする
+    if (!numBlank && Number(input.num) > 0 && (denBlank || !(Number(input.den) > 0))) {
       return {
         isCorrect: false,
         status: 'invalid',
         message: '分母（下の数字）を正しく入力してね'
       };
     }
+    if (numBlank && !denBlank) {
+      return {
+        isCorrect: false,
+        status: 'invalid',
+        message: '分子（上の数字）も入力してね'
+      };
+    }
+
+    const inWhole = Number(input.whole) || 0;
+    const inNum = Number(input.num) || 0;
+    const inDen = Number(input.den) || 1;
+
+    const ans = problemData.answer;
 
     if (ans.isInteger) {
       // 整数として入力された場合（例: 1）

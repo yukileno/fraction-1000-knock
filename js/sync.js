@@ -141,14 +141,27 @@
         }))
       };
 
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30000);
       try {
-        await fetch(this.gasUrl, {
+        const res = await fetch(this.gasUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'text/plain;charset=utf-8'
           },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
+          signal: controller.signal
         });
+        clearTimeout(timer);
+
+        // GASが保存成功を返した場合のみ送信済みにする（失敗時は未送信のまま残して次回再送）
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const result = await res.json();
+        if (!result || result.status !== 'success') {
+          throw new Error((result && result.message) || 'スプレッドシートへの保存に失敗しました');
+        }
 
         const syncedIds = unsynced.map(l => l.id);
         this.markLogsAsSynced(syncedIds);
@@ -167,6 +180,7 @@
 
         return { status: 'success', count: syncedIds.length };
       } catch (err) {
+        clearTimeout(timer);
         console.warn('Sync failed (offline or network issue):', err);
         this.isSyncing = false;
         this.notify('error', unsynced.length, err.message);

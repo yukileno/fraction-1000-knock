@@ -7,6 +7,16 @@
   const SheetSync = window.SheetSync;
   const AuthManager = window.AuthManager;
 
+  // innerHTML に埋め込む文字列（ニックネーム等の外部入力）のHTMLエスケープ
+  function escapeHtml(str) {
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   // 熱血効果音プレイヤー (オーディオファイル ＆ Web Audio API)
   class SoundPlayer {
     constructor() {
@@ -839,6 +849,13 @@
 
         const result = checkAnswer(inputVal, this.currentProblem);
 
+        // 分母・分子の入れ忘れは空振り（ミス）に数えず、入力のやり直しを促す
+        if (result.status === 'invalid') {
+          this.showFeedback('warning', result.message);
+          this.setActiveInput(numStr ? this.inputDen : this.inputNum);
+          return;
+        }
+
         const userAnswerDisplay = wholeStr
           ? (numStr ? `${wholeStr}と${numStr}/${denStr}` : wholeStr)
           : (numStr ? `${numStr}/${denStr}` : '0');
@@ -1488,7 +1505,7 @@
               num = 0;
               den = 1;
             } else {
-              return s;
+              return escapeHtml(s);
             }
           }
         }
@@ -1553,7 +1570,7 @@
         `;
       }
 
-      return formulaStr;
+      return escapeHtml(formulaStr);
     }
 
     renderAnswerToHtml(prob) {
@@ -1589,7 +1606,7 @@
           : `<span style="color:#b91c1c; font-weight:bold;">${log.mistakeCount}回空振り</span>`;
         const formulaHtml = this.renderFormulaToHtml(log.problem);
         const answerHtml = this.renderAnswerToHtml(log.problem);
-        const categoryStr = log.problem ? (log.problem.category || '分数計算') : '分数計算';
+        const categoryStr = escapeHtml(log.problem ? (log.problem.category || '分数計算') : '分数計算');
         return `
           <tr>
             <td>${timeStr}</td>
@@ -1821,8 +1838,8 @@
         }
 
         // 選手名
-        const nickDisplay = (u.nickname || '選手').trim();
-        const classNumDisplay = `${u.className || ''} ${u.studentNumber ? u.studentNumber + '番' : ''}`;
+        const nickDisplay = escapeHtml((u.nickname || '選手').trim());
+        const classNumDisplay = escapeHtml(`${u.className || ''} ${u.studentNumber ? u.studentNumber + '番' : ''}`);
         const meTag = isMe ? '<span class="my-player-tag">あなた</span>' : '';
 
         // 目標達成状況（あと何問か、1000問完走なら追加練習で何問か）

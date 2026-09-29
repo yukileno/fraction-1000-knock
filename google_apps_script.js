@@ -34,31 +34,57 @@ function menuUpdateChartCombo() {
 function menuFixLogSheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var res = fixLogSheetData(ss);
-  SpreadsheetApp.getUi().alert('「計算ドリル記録」シートの修復が完了しました！\n\nヘッダーを正しい12項目に更新し、日付化していた正解データを ' + res.fixedCount + ' 件修復しました。');
+  SpreadsheetApp.getUi().alert('「計算ドリル記録」シートの修復が完了しました！\n\nヘッダーを正しい13項目に更新し、日付化していた正解データを ' + res.fixedCount + ' 件修復しました。');
+}
+
+// 「計算ドリル記録」の列数（A〜M）。M列 = ログID（端末で採番される一意ID。再送時の重複判定に使用）
+var LOG_COLS = 13;
+var LOG_ID_COL = 13;
+
+// 旧形式（ログIDなし）の行に使う重複判定キー: クラス|番号|セッション|問題式|正解
+function legacyLogKey(className, studentNumber, sessionId, formula, answer) {
+  return [className || '', studentNumber ? Number(studentNumber) : '', sessionId || '',
+    String(formula || '').replace(/^'/, '').trim(), String(answer || '').replace(/^'/, '').trim()].join('|');
 }
 
 function doPost(e) {
+  // 同時書き込みで getLastRow() が競合し、行が上書きされるのを防ぐ
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(25000);
+  } catch (lockErr) {
+    // ロック取得失敗は error を返す → 端末側は未送信のまま残し、次回自動で再送する
+    return ContentService.createTextOutput(JSON.stringify({
+      status: 'error',
+      message: 'サーバー混雑中のため保存できませんでした（自動で再送します）'
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
   try {
     var rawData = e.postData.contents;
     var data = JSON.parse(rawData);
     var ss = SpreadsheetApp.getActiveSpreadsheet();
 
-    // 1. 学習ログの保存（重複排除チェック付きで安全・高速に追記！）
+    // 1. 学習ログの保存（ログIDで重複排除して追記）
     if (data.action === 'save_logs' && data.logs && data.logs.length > 0) {
       var logSheet = getOrCreateLogSheet(ss);
       var lastRow = logSheet.getLastRow();
 
-      // 直近の既存ログ（最新50行）を取得して重複照合用のセットを作成
-      var recentSet = {};
+      // 既存のログID一覧（再送された同じログを弾く）
+      var existingIds = {};
+      // ログIDを持たない旧クライアント向け: 直近50行の旧キー
+      var recentLegacySet = {};
       if (lastRow > 1) {
+        var idValues = logSheet.getRange(2, LOG_ID_COL, lastRow - 1, 1).getValues();
+        for (var iv = 0; iv < idValues.length; iv++) {
+          if (idValues[iv][0]) existingIds[String(idValues[iv][0])] = true;
+        }
         var checkCount = Math.min(50, lastRow - 1);
         var checkStart = lastRow - checkCount + 1;
         var existingRecent = logSheet.getRange(checkStart, 1, checkCount, 12).getValues();
         for (var er = 0; er < existingRecent.length; er++) {
           var rVal = existingRecent[er];
-          // クラス_番号_セッション_問題式_正解
-          var eKey = [rVal[1], rVal[2], rVal[10], String(rVal[4]).replace(/^'/, '').trim(), String(rVal[7]).replace(/^'/, '').trim()].join('|');
-          recentSet[eKey] = true;
+          recentLegacySet[legacyLogKey(rVal[1], rVal[2], rVal[10], rVal[4], rVal[7])] = true;
         }
       }
 
@@ -72,11 +98,13 @@ function doPost(e) {
         var formulaStr = String(log.formula || '').trim();
         var answerStr = String(log.correctAnswer || '').trim();
         var sId = String(log.sessionId || '').trim();
+        var logId = String(log.id || '').trim();
 
-        // 💥【超重要・同一問題の連打・重複記録を完全防止】
-        var dupKey = [log.className || '', log.studentNumber ? Number(log.studentNumber) : '', sId, formulaStr, answerStr].join('|');
-        if (seenInPayload[dupKey] || recentSet[dupKey]) {
-          // すでに同一ペイロード内またはスプレッドシート直近行に存在する場合は重複としてスキップ！
+        // 重複判定: ログIDがあればIDで判定（同じ問題を別の機会に解いた正当な記録は残す）
+        var dupKey = logId
+          ? 'id:' + logId
+          : legacyLogKey(log.className, log.studentNumber, sId, formulaStr, answerStr);
+        if (seenInPayload[dupKey] || (logId ? existingIds[logId] : recentLegacySet[dupKey])) {
           continue;
         }
         seenInPayload[dupKey] = true;
@@ -93,13 +121,14 @@ function doPost(e) {
           log.timeSpentSeconds || 0,                         // I: 所要時間(秒)
           log.mistakeCount || 0,                             // J: 間違えた回数
           sId,                                               // K: セッションID
-          "'" + dateStr                                      // L: 日付 (YYYY-MM-DD)
+          "'" + dateStr,                                     // L: 日付 (YYYY-MM-DD)
+          logId                                              // M: ログID
         ]);
       }
 
       if (rows.length > 0) {
         lastRow = logSheet.getLastRow();
-        logSheet.getRange(lastRow + 1, 1, rows.length, 12).setValues(rows);
+        logSheet.getRange(lastRow + 1, 1, rows.length, LOG_COLS).setValues(rows);
         // A列に明示的に日時書式（時分秒まで）を適用して時間表示を保証！
         logSheet.getRange(lastRow + 1, 1, rows.length, 1).setNumberFormat('yyyy-MM-dd HH:mm:ss');
       }
@@ -162,6 +191,8 @@ function doPost(e) {
       status: 'error',
       message: err.toString()
     })).setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
   }
 }
 
@@ -362,7 +393,7 @@ function doGet(e) {
         var seenMap = {};
         for (var i = 1; i < lVals.length; i++) {
           var r = lVals[i];
-          var key = [r[1], r[2], r[10], r[4], r[7], r[8], r[9]].join('|');
+          var key = r[12] ? 'id:' + r[12] : [r[1], r[2], r[10], r[4], r[7], r[8], r[9]].join('|');
           if (!seenMap[key]) {
             seenMap[key] = [i + 1];
           } else {
@@ -390,13 +421,14 @@ function doGet(e) {
       if (lSheet) {
         var lastRow = lSheet.getLastRow();
         if (lastRow > 1) {
-          var allValues = lSheet.getRange(2, 1, lastRow - 1, 12).getValues();
+          var allValues = lSheet.getRange(2, 1, lastRow - 1, LOG_COLS).getValues();
           var seenMap = {};
           var uniqueRows = [];
 
           for (var i = 0; i < allValues.length; i++) {
             var r = allValues[i];
-            var key = [r[1], r[2], r[10], String(r[4]).replace(/^'/, '').trim(), String(r[7]).replace(/^'/, '').trim()].join('|');
+            // ログIDがある行はIDが同じものだけを重複とみなす（同じ問題を解き直した正当な記録は残す）
+            var key = r[12] ? 'id:' + r[12] : legacyLogKey(r[1], r[2], r[10], r[4], r[7]);
             if (!seenMap[key]) {
               seenMap[key] = true;
               uniqueRows.push(r);
@@ -407,8 +439,8 @@ function doGet(e) {
 
           if (deletedRows > 0) {
             // 2行目以降の全データをクリアして、ユニーク行だけを一括書き戻し！
-            lSheet.getRange(2, 1, lastRow - 1, 12).clearContent();
-            lSheet.getRange(2, 1, uniqueRows.length, 12).setValues(uniqueRows);
+            lSheet.getRange(2, 1, lastRow - 1, LOG_COLS).clearContent();
+            lSheet.getRange(2, 1, uniqueRows.length, LOG_COLS).setValues(uniqueRows);
             // 余分な行を末尾から一括削除
             if (lastRow > uniqueRows.length + 1) {
               var extraRows = lastRow - (uniqueRows.length + 1);
@@ -634,18 +666,23 @@ function getOrCreateLogSheet(ss) {
   var headers = [
     '記録日時', 'クラス', '出席番号', 'ニックネーム',
     '問題式', '演算', '単元分類', '正解',
-    '所要時間(秒)', '間違えた回数', 'セッションID', '日付(検索用)'
+    '所要時間(秒)', '間違えた回数', 'セッションID', '日付(検索用)', 'ログID'
   ];
 
   if (!sheet) {
     sheet = ss.insertSheet(sheetName);
     sheet.appendRow(headers);
-    sheet.getRange(1, 1, 1, 12).setBackground('#1e40af').setFontColor('#ffffff').setFontWeight('bold');
+    sheet.getRange(1, 1, 1, LOG_COLS).setBackground('#1e40af').setFontColor('#ffffff').setFontWeight('bold');
     sheet.setFrozenRows(1);
   } else {
-    // 既存シートのヘッダーが古いまたはずれている場合は最新12項目に上書き修復
-    sheet.getRange(1, 1, 1, 12).setValues([headers]);
-    sheet.getRange(1, 1, 1, 12).setBackground('#1e40af').setFontColor('#ffffff').setFontWeight('bold');
+    // ヘッダーが最新と一致している場合は書式設定をスキップ（毎回の保存処理を軽くしてロック待ちを短縮）
+    var curHeaders = sheet.getRange(1, 1, 1, LOG_COLS).getValues()[0];
+    if (curHeaders.join('\t') === headers.join('\t')) {
+      return sheet;
+    }
+    // 既存シートのヘッダーが古いまたはずれている場合は最新13項目に上書き修復
+    sheet.getRange(1, 1, 1, LOG_COLS).setValues([headers]);
+    sheet.getRange(1, 1, 1, LOG_COLS).setBackground('#1e40af').setFontColor('#ffffff').setFontWeight('bold');
     sheet.setFrozenRows(1);
   }
 
@@ -666,7 +703,7 @@ function getOrCreateLogSheet(ss) {
 
 /**
  * 🛠️ 「計算ドリル記録」シートの全データ修復
- * - ヘッダーを正しい12項目に更新
+ * - ヘッダーを正しい13項目に更新
  * - 日付型に勝手に誤変換されてしまった正解データを元の分数文字列に復元
  * - 列幅の自動調整
  */
