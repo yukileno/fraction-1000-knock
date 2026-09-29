@@ -16,6 +16,7 @@ function onOpen() {
     .addItem('🧹 「計算ドリル記録」の重複ログを削除', 'menuDeduplicateLogs')
     .addItem('📊 「日別集計」シートを再構築', 'setupDailySummarySheet')
     .addItem('📈 「研究用_学習曲線」シートを再構築', 'setupResearchSheet')
+    .addItem('🔄 集計シートの数式だけを最新に更新（選択・グラフはそのまま）', 'refreshAnalysisSheets')
     .addSeparator()
     .addItem('📈 グラフを「左右2軸（折れ線＋折れ線）」に変更', 'menuUpdateChartLine')
     .addItem('📊 グラフを「左右2軸（折れ線＋赤棒グラフ）」に変更', 'menuUpdateChartCombo')
@@ -1036,6 +1037,27 @@ function getOrCreateUserSheet(ss) {
  * 📊 「日別集計」シートの作成・フォーミュラ設定
  * - 集計日付 ＆ クラス ＆ 開始時刻〜終了時刻（何時から何時まで）の絞り込み集計に完全対応！
  */
+/**
+ * 「日別集計」出席番号 num の行（4〜48行目）の A〜H 列。
+ * 答えを表示して次へ進んだ問題は、問題数・平均解答時間・1発正解数に数えない
+ */
+function dailyRowFormulas(num) {
+  var row = num + 3;
+  var L = '計算ドリル記録!';
+  var me = L + '$B:$B, $D$1, ' + L + '$C:$C, ' + num + ', ' + L + '$A:$A, ">="&$J$1, ' + L + '$A:$A, "<="&$K$1';
+  var solvedOnly = ', ' + L + '$P:$P, "<>答え表示"';
+  return [
+    num,                                                                                         // A: 番号
+    '=IFERROR(INDEX(児童名簿!$D:$D, MATCH(1, (児童名簿!$B:$B=$D$1)*(児童名簿!$C:$C=' + num + '), 0)), "-")', // B: ニックネーム
+    '=COUNTIFS(' + me + solvedOnly + ')',                                                          // C: 解いた問題数
+    '=IF(C' + row + '=0, 0, ROUND(SUMIFS(' + L + '$I:$I, ' + me + ')/60, 1))',                     // D: 学習時間(分)
+    '=IF(C' + row + '=0, "-", ROUND(SUMIFS(' + L + '$I:$I, ' + me + solvedOnly + ')/C' + row + ', 0))', // E: 平均解答時間(秒)
+    '=IF(C' + row + '=0, "-", SUMIFS(' + L + '$J:$J, ' + me + '))',                                // F: 間違えた回数
+    '=IF(C' + row + '=0, "-", COUNTIFS(' + me + ', ' + L + '$J:$J, 0' + solvedOnly + '))',          // G: 1発正解数
+    '=IF(C' + row + '=0, "-", TEXT(G' + row + '/C' + row + ', "0.0%"))'                            // H: 1発正解率
+  ];
+}
+
 function setupDailySummarySheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheetName = '日別集計';
@@ -1124,24 +1146,7 @@ function setupDailySummarySheet() {
   // 4. 各出席番号（1〜45番）の数式設定（開始日時 J1 〜 終了日時 K1 で範囲フィルタ）
   var formulaRows = [];
   for (var num = 1; num <= 45; num++) {
-    var row = num + 3; // 行番号 (4〜48)
-    formulaRows.push([
-      num, // A列: 番号
-      // B列: ニックネーム
-      '=IFERROR(INDEX(児童名簿!$D:$D, MATCH(1, (児童名簿!$B:$B=$D$1)*(児童名簿!$C:$C=' + num + '), 0)), "-")',
-      // C列: 解いた問題数（答えを表示して次へ進んだ問題は数えない）
-      '=COUNTIFS(計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + ', 計算ドリル記録!$A:$A, ">="&$J$1, 計算ドリル記録!$A:$A, "<="&$K$1, 計算ドリル記録!$P:$P, "<>答え表示")',
-      // D列: 学習時間(分)
-      '=IF(C' + row + '=0, 0, ROUND(SUMIFS(計算ドリル記録!$I:$I, 計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + ', 計算ドリル記録!$A:$A, ">="&$J$1, 計算ドリル記録!$A:$A, "<="&$K$1)/60, 1))',
-      // E列: 平均解答時間(秒)
-      '=IF(C' + row + '=0, "-", ROUND(SUMIFS(計算ドリル記録!$I:$I, 計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + ', 計算ドリル記録!$A:$A, ">="&$J$1, 計算ドリル記録!$A:$A, "<="&$K$1, 計算ドリル記録!$P:$P, "<>答え表示")/C' + row + ', 0))',
-      // F列: 間違えた回数
-      '=IF(C' + row + '=0, "-", SUMIFS(計算ドリル記録!$J:$J, 計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + ', 計算ドリル記録!$A:$A, ">="&$J$1, 計算ドリル記録!$A:$A, "<="&$K$1))',
-      // G列: 1発正解数
-      '=IF(C' + row + '=0, "-", COUNTIFS(計算ドリル記録!$B:$B, $D$1, 計算ドリル記録!$C:$C, ' + num + ', 計算ドリル記録!$A:$A, ">="&$J$1, 計算ドリル記録!$A:$A, "<="&$K$1, 計算ドリル記録!$J:$J, 0, 計算ドリル記録!$P:$P, "<>答え表示"))',
-      // H列: 1発正解率
-      '=IF(C' + row + '=0, "-", TEXT(G' + row + '/C' + row + ', "0.0%"))'
-    ]);
+    formulaRows.push(dailyRowFormulas(num));
   }
   sheet.getRange(4, 1, 45, headers.length).setValues(formulaRows);
 
@@ -1232,6 +1237,29 @@ function setupResearchSheet() {
   var unitRule = SpreadsheetApp.newDataValidation().requireValueInList(unitList, true).build();
   sheet.getRange('H1').setDataValidation(unitRule);
 
+  applyResearchLayout(sheet);
+
+  // --- 📈 複合グラフの自動生成（所要時間 ＆ エラー率・ミスの可視化） ---
+  insertResearchChart(sheet);
+
+  return { status: 'success', sheet: sheetName };
+}
+
+// 研究用シートの種別フィルター（I1-J1）の選択肢
+var RESEARCH_KIND_OPTIONS = ['すべて', '計測球のみ', '練習球のみ', '第1期（段階導入前）のみ'];
+
+/**
+ * 「研究用_学習曲線」の種別フィルター・サマリー・見出し・抽出数式を設定する。
+ * クラス/出席番号/単元の選択値とグラフは触らないので、既存シートに再適用しても安全。
+ */
+function applyResearchLayout(sheet) {
+  // I1-J1: 種別フィルター（計測球/練習球/第1期）。既に選んでいる値は保持
+  sheet.getRange('I1').setValue('📏 種別:').setFontWeight('bold').setBackground('#f1f5f9');
+  var kindCell = sheet.getRange('J1');
+  if (RESEARCH_KIND_OPTIONS.indexOf(String(kindCell.getValue())) === -1) kindCell.setValue('すべて');
+  kindCell.setBackground('#fef3c7').setFontWeight('bold')
+    .setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(RESEARCH_KIND_OPTIONS, true).build());
+
   // --- 2行目: リアルタイム成績サマリーバー ---
   sheet.getRange('A2').setValue('📊 対象問題数:').setFontWeight('bold');
   sheet.getRange('B2').setFormula('=COUNT(F4:F)').setFontWeight('bold').setFontColor('#2563eb');
@@ -1247,25 +1275,26 @@ function setupResearchSheet() {
 
   sheet.getRange('A2:H2').setBackground('#f8fafc').setBorder(true, true, true, true, false, false);
 
-  // --- 3行目: テーブルヘッダー ---
+  // --- 3行目: テーブルヘッダー（H列=答え表示、I列=結果） ---
   var headers = [
     '解いた順番', '記録日時', '問題式', '単元分類',
-    '正解', '所要時間(秒)', '間違えた回数', '結果(1発/ミス)'
+    '正解', '所要時間(秒)', '間違えた回数', '答え表示', '結果(1発/ミス)'
   ];
   sheet.getRange(3, 1, 1, headers.length).setValues([headers])
     .setBackground('#1e40af').setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
   sheet.setFrozenRows(3);
 
   // --- 4行目以降: 自動抽出数式 ---
-  // QUERY式: クラス、出席番号(全員対応)、単元分類(部分一致対応)の3条件を完全網羅
-  var queryFormula = '=IFERROR(QUERY(計算ドリル記録!A2:L, "SELECT A, E, G, H, I, J WHERE B = \'" & $B$1 & "\' " & IF($D$1="全員", "", " AND C = " & $D$1) & IF($H$1="すべて（全単元）", "", IF($H$1="約分あり", " AND G CONTAINS \'約分\'", " AND G CONTAINS \'" & $H$1 & "\'")) & " ORDER BY A ASC", 0), "")';
+  // QUERY式: クラス、出席番号(全員対応)、単元分類(部分一致対応)、種別（O列: 計測球/練習球/空欄=第1期）
+  var queryFormula = '=IFERROR(QUERY(計算ドリル記録!A2:P, "SELECT A, E, G, H, I, J, P WHERE B = \'" & $B$1 & "\' " & IF($D$1="全員", "", " AND C = " & $D$1) & IF($H$1="すべて（全単元）", "", IF($H$1="約分あり", " AND G CONTAINS \'約分\'", " AND G CONTAINS \'" & $H$1 & "\'")) & IF($J$1="計測球のみ", " AND O = \'計測球\'", IF($J$1="練習球のみ", " AND O = \'練習球\'", IF($J$1="第1期（段階導入前）のみ", " AND O IS NULL", ""))) & " ORDER BY A ASC", 0), "")';
+  sheet.getRange('H4:I').clearContent(); // 旧レイアウト（H4に結果の数式）を消してから配置
   sheet.getRange('B4').setFormula(queryFormula);
 
   // A列: 解いた順番 (第 1 問, 第 2 問...)
   sheet.getRange('A4').setFormula('=ARRAYFORMULA(IF(ISBLANK(B4:B), "", "第 " & (ROW(B4:B)-3) & " 問"))');
 
-  // H列: 結果 (○ 1発ヒット / × N回空振り)
-  sheet.getRange('H4').setFormula('=ARRAYFORMULA(IF(ISBLANK(B4:B), "", IF(G4:G=0, "○ 1発ヒット", "× " & G4:G & "回空振り")))');
+  // I列: 結果 (○ 1発ヒット / 📖 答え表示 / × N回空振り)
+  sheet.getRange('I4').setFormula('=ARRAYFORMULA(IF(ISBLANK(B4:B), "", IF(H4:H="答え表示", "📖 答え表示", IF(G4:G=0, "○ 1発ヒット", "× " & G4:G & "回空振り"))))');
 
   // 列幅設定
   sheet.setColumnWidth(1, 100);
@@ -1275,13 +1304,15 @@ function setupResearchSheet() {
   sheet.setColumnWidth(5, 90);
   sheet.setColumnWidth(6, 110);
   sheet.setColumnWidth(7, 110);
-  sheet.setColumnWidth(8, 120);
+  sheet.setColumnWidth(8, 90);
+  sheet.setColumnWidth(9, 120);
 
   // 書式
   sheet.getRange('F4:F').setNumberFormat('#,##0');
   sheet.getRange('G4:G').setNumberFormat('#,##0');
+}
 
-  // --- 📈 複合グラフの自動生成（所要時間 ＆ エラー率・ミスの可視化） ---
+function insertResearchChart(sheet) {
   var chart = sheet.newChart()
     .asComboChart()
     .addRange(sheet.getRange('A3:A100')) // 横軸ラベル: 第1問, 第2問...
@@ -1305,8 +1336,29 @@ function setupResearchSheet() {
     .build();
 
   sheet.insertChart(chart);
+}
 
-  return { status: 'success', sheet: sheetName };
+/**
+ * 🔄 既存の「日別集計」「研究用_学習曲線」を最新の数式・レイアウトに更新（非破壊）。
+ * 日別集計の日付/クラス/時刻、研究用のクラス/番号/単元/種別の選択とグラフはそのまま残る。
+ * clasp run refreshAnalysisSheets で実行できる（UI を使わないので API 実行可）
+ */
+function refreshAnalysisSheets() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var result = { daily: 'not_found', research: 'not_found' };
+  var daily = ss.getSheetByName('日別集計');
+  if (daily) {
+    var rows = [];
+    for (var num = 1; num <= 45; num++) rows.push(dailyRowFormulas(num));
+    daily.getRange(4, 1, 45, 8).setValues(rows);
+    result.daily = 'updated';
+  }
+  var research = ss.getSheetByName('研究用_学習曲線');
+  if (research) {
+    applyResearchLayout(research);
+    result.research = 'updated';
+  }
+  return result;
 }
 
 /**
